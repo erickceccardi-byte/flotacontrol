@@ -1,4 +1,4 @@
-const CACHE = 'flotacontrol-v1';
+const CACHE = 'flotacontrol-v3';
 const FILES = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
