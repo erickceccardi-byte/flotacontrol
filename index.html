@@ -471,6 +471,13 @@ audio{width:100%;height:36px;margin-top:6px}
         <button class="btn btnacc" onclick="saveCfg()">Guardar comisiones</button>
       </div>
 
+      <div class="sh">Mapeo GPS → Conductores</div>
+      <div class="card" id="gps-map-card">
+        <p style="font-size:12px;color:var(--txt2);margin:0 0 10px">Asigna cada dispositivo Traccar a un conductor. Conecta GPS primero.</p>
+        <div id="gps-map-list"><div style="font-size:13px;color:var(--txt3)">Conecta Traccar en la pestaña GPS para ver los dispositivos.</div></div>
+        <button class="btn" onclick="saveGPSMap()" style="margin-top:10px">Guardar mapeo</button>
+      </div>
+
       <div class="sh">Sincronización Firebase (opcional)</div>
       <div class="card">
         <div class="alert b" style="margin-bottom:10px">Firebase sincroniza los datos entre todos los teléfonos automáticamente, incluso con internet intermitente.</div>
@@ -788,6 +795,7 @@ async function regTrip() {
   if (!amt || amt <= 0) { toast('Ingresa el monto cobrado'); return; }
   if (!selCobroType) { toast('Selecciona la forma de cobro'); return; }
 
+  const currency = document.getElementById('f-currency')?.value || 'CUP';
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
   const trip = {
@@ -1139,9 +1147,12 @@ async function loadGPS() {
   let html = '';
   for (let i=0; i<tcDevices.length; i++) {
     const d = tcDevices[i];
-    const driver = drivers[i] || null;
-    const dname = driver ? driver.name : d.name;
-    const did = driver ? driver.id : d.id;
+    const cfg2 = getCfg();
+    const gpsMap = cfg2.gpsMap || {};
+    const mappedDriverId = gpsMap[d.id];
+    const mappedDriver = mappedDriverId ? drivers.find(dr => dr.id === mappedDriverId) : (drivers[i] || null);
+    const dname = mappedDriver ? mappedDriver.name : d.name;
+    const did = mappedDriver ? mappedDriver.id : ('device_' + d.id);
     const [bg,col] = COLS[i%COLS.length];
     const fp = `?deviceId=${d.id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
     const aH = { 'Authorization':'Basic '+btoa(cfg.traccar.email+':'+cfg.traccar.pass), 'Accept':'application/json' };
@@ -1264,6 +1275,40 @@ function toast(m, d=2500) {
 // ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
+
+
+// ── GPS Device Mapping ──
+function renderGPSMap() {
+  const el = document.getElementById('gps-map-list');
+  if (!el) return;
+  if (!tcDevices.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3)">Conecta Traccar en la pestaña GPS para ver los dispositivos.</div>'; return; }
+  const cfg = getCfg();
+  const map = cfg.gpsMap || {};
+  const drivers = getDrivers();
+  el.innerHTML = tcDevices.map(d => {
+    const sel = map[d.id] || '';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="flex:1;font-size:13px;font-weight:500">${d.name}</div>
+      <span style="font-size:11px;color:var(--txt3)">→</span>
+      <select id="gpsmap-${d.id}" style="flex:1;background:var(--bg2);border:1px solid var(--brd2);border-radius:var(--r);padding:6px 8px;font-size:13px;color:var(--txt);outline:none">
+        <option value="">Sin asignar</option>
+        ${drivers.map(dr => `<option value="${dr.id}" ${sel===dr.id?'selected':''}>${dr.name}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+}
+
+function saveGPSMap() {
+  const cfg = getCfg();
+  cfg.gpsMap = {};
+  tcDevices.forEach(d => {
+    const sel = document.getElementById('gpsmap-' + d.id);
+    if (sel && sel.value) cfg.gpsMap[d.id] = sel.value;
+  });
+  setCfg(cfg);
+  toast('Mapeo GPS guardado');
+}
+// ──────────────────────
 
 // ══ SHIFT MANAGEMENT ══
 let currentShift = null;
