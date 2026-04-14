@@ -1266,6 +1266,23 @@ async function init() {
   updateOnlineUI();
 }
 
+
+  // ══ AUTO-FIREBASE CONFIG ══
+  const AUTO_FB = {"apiKey": "AIzaSyAot4WmR3n1PvmuSfsnjmC9VxbTdjmDzaE", "databaseURL": "https://flotacontrol-e9078-default-rtdb.firebaseio.com", "projectId": "flotacontrol-e9078"};
+  const AUTO_DRIVERS = [{"id": "d001", "name": "Cesar", "username": "cesar", "password": "8821"}, {"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amauri", "username": "amauri", "password": "0030"}, {"id": "d004", "name": "Prueba", "username": "prueba", "password": "0000"}];
+  
+  // Pre-load firebase config
+  const existingCfg = getCfg();
+  if (!existingCfg.firebase) {
+    existingCfg.firebase = AUTO_FB;
+    setCfg(existingCfg);
+  }
+  // Pre-load drivers if empty
+  if (!getDrivers().length) {
+    localStorage.setItem('fc_drivers', JSON.stringify(AUTO_DRIVERS));
+  }
+  // ══════════════════════════
+
 init();
 </script>
 </body>
