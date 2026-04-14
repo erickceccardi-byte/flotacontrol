@@ -1264,6 +1264,62 @@ function toast(m, d=2500) {
 // ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
+
+// ══ SHIFT MANAGEMENT ══
+let currentShift = null;
+
+function initShiftUI() {
+  if (!currentUser) return;
+  const saved = localStorage.getItem('fc_shift_' + currentUser.id);
+  if (saved) {
+    currentShift = JSON.parse(saved);
+    updateShiftBtn();
+    if ($('shift-bar')) {
+      $('shift-bar').style.display = 'block';
+      $('shift-info').textContent = 'Turno activo desde ' + currentShift.start;
+    }
+  } else {
+    currentShift = null;
+    updateShiftBtn();
+  }
+}
+
+function updateShiftBtn() {
+  const btn = $('shift-btn');
+  if (!btn) return;
+  if (currentShift) {
+    btn.textContent = 'Terminar turno';
+    btn.style.cssText = 'font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid #F09595;cursor:pointer;font-family:inherit;font-weight:500;background:#FCEBEB;color:#A32D2D;';
+  } else {
+    btn.textContent = 'Iniciar turno';
+    btn.style.cssText = 'font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid #97C459;cursor:pointer;font-family:inherit;font-weight:500;background:#EAF3DE;color:#3B6D11;';
+  }
+}
+
+function toggleShift() {
+  if (!currentUser) return;
+  if (currentShift) {
+    const dur = Math.round((Date.now() - currentShift.startTs) / 60000);
+    const hrs = Math.floor(dur/60), mins = dur%60;
+    localStorage.removeItem('fc_shift_' + currentUser.id);
+    currentShift = null;
+    if ($('shift-bar')) $('shift-bar').style.display = 'none';
+    updateShiftBtn();
+    toast('Turno terminado — ' + hrs + 'h ' + mins + 'min trabajados');
+  } else {
+    const start = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+    currentShift = { start, startTs: Date.now(), driverId: currentUser.id };
+    localStorage.setItem('fc_shift_' + currentUser.id, JSON.stringify(currentShift));
+    if ($('shift-bar')) {
+      $('shift-bar').style.display = 'block';
+      $('shift-info').textContent = 'Turno activo desde ' + start;
+    }
+    updateShiftBtn();
+    toast('Turno iniciado — ¡Buen trabajo!');
+  }
+}
+// ══════════════════════
+
 async function init() {
   // Register service worker
   if ('serviceWorker' in navigator) {
