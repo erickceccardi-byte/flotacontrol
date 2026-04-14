@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#1a1a18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<title>FlotaControl</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f5f5f3;--bg3:#ececea;
+  --txt:#1a1a18;--txt2:#6b6b67;--txt3:#9c9a92;
+  --brd:rgba(0,0,0,.12);--brd2:rgba(0,0,0,.22);
+  --r:10px;--rl:14px;
+  --g:#3B6D11;--gbg:#EAF3DE;--gbrd:#97C459;
+  --re:#A32D2D;--rebg:#FCEBEB;--rebrd:#F09595;
+  --am:#854F0B;--ambg:#FAEEDA;--ambrd:#FAC775;
+  --bl:#185FA5;--blbg:#E6F1FB;--blbrd:#85B7EB;
+  --tl:#0F6E56;--tlbg:#E1F5EE;--tlbrd:#5DCAA5;
+  --pu:#534AB7;--pubg:#EEEDFE;--pubrd:#AFA9EC;
+  --dark:#1a1a18;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg2);color:var(--txt);min-height:100vh;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+input,button,select,textarea{font-family:inherit;font-size:16px}
+input[type=number]{-moz-appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* SCREENS */
+.scr{display:none;min-height:100vh}
+.scr.active{display:flex;flex-direction:column}
+
+/* ─── LOGIN ─── */
+#scr-login{background:var(--dark);align-items:center;justify-content:center;padding:24px}
+.login-box{width:100%;max-width:340px}
+.login-logo{text-align:center;margin-bottom:32px}
+.login-logo .icon{width:64px;height:64px;border-radius:16px;background:var(--gbg);margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px}
+.login-logo h1{font-size:22px;font-weight:600;color:#fff;letter-spacing:-.3px}
+.login-logo p{font-size:13px;color:rgba(255,255,255,.45);margin-top:3px}
+.login-field{margin-bottom:14px}
+.login-field label{display:block;font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+.login-field input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:var(--r);padding:13px 14px;color:#fff;font-size:16px;outline:none;transition:border .15s}
+.login-field input:focus{border-color:rgba(255,255,255,.4)}
+.login-field input::placeholder{color:rgba(255,255,255,.25)}
+.login-btn{width:100%;padding:14px;background:#fff;color:var(--dark);border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:pointer;margin-top:6px;transition:opacity .15s}
+.login-btn:active{opacity:.85}
+.login-err{font-size:12px;color:#F09595;text-align:center;margin-top:10px;min-height:18px}
+.login-info{font-size:11px;color:rgba(255,255,255,.25);text-align:center;margin-top:20px}
+
+/* ─── DRIVER ─── */
+#scr-driver{background:var(--bg2)}
+.top-bar{background:var(--dark);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.top-bar .user{display:flex;align-items:center;gap:10px}
+.top-bar .av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;background:var(--gbg);color:var(--g);flex-shrink:0}
+.top-bar .uname{font-size:14px;font-weight:500;color:#fff}
+.top-bar .udate{font-size:11px;color:rgba(255,255,255,.45)}
+.top-bar .logout{font-size:12px;color:rgba(255,255,255,.45);background:transparent;border:none;cursor:pointer;padding:4px 8px}
+.sync-bar{background:var(--ambg);border-bottom:1px solid var(--ambrd);padding:7px 16px;font-size:12px;color:var(--am);display:none;align-items:center;gap:6px}
+.sync-bar.show{display:flex}
+.sync-bar .sdot{width:6px;height:6px;border-radius:50%;background:var(--am);flex-shrink:0;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.drv-body{flex:1;overflow-y:auto;padding:14px}
+
+/* FORM CARD */
+.fcard{background:var(--bg);border-radius:var(--rl);padding:16px;margin-bottom:12px;border:0.5px solid var(--brd)}
+.sec-lbl{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+
+/* Canal buttons */
+.canal-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cbtn{background:var(--bg2);border:1.5px solid var(--brd);border-radius:var(--r);padding:12px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .12s;user-select:none}
+.cbtn.sel-nave{background:var(--rebg);border-color:var(--re)}
+.cbtn.sel-cinco{background:var(--blbg);border-color:var(--bl)}
+.cbtn.sel-wapp{background:var(--gbg);border-color:var(--g)}
+.cbtn.sel-directo{background:var(--tlbg);border-color:var(--tl)}
+.cbtn:active{transform:scale(.97)}
+.cdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cdot.nave{background:var(--re)}.cdot.cinco{background:var(--bl)}.cdot.wapp{background:var(--g)}.cdot.directo{background:var(--tl)}
+.cname{font-size:13px;font-weight:500;color:var(--txt)}
+.ccom{font-size:10px;color:var(--txt3)}
+
+/* Amount */
+.amt-wrap{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--brd2);border-radius:var(--r);padding:12px 14px}
+.amt-cur{font-size:16px;font-weight:500;color:var(--txt3)}
+.amt-inp{flex:1;border:none;background:transparent;font-size:26px;font-weight:600;color:var(--txt);outline:none}
+.amt-inp::placeholder{color:var(--brd2);font-weight:400}
+.net-prev{font-size:12px;color:var(--g);font-weight:500;padding:5px 2px}
+
+/* Cobro toggle */
+.cobro-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cobro-btn{background:var(--bg2);border:1.5px solid var(--brd);border-radius:var(--r);padding:11px 8px;text-align:center;cursor:pointer;transition:all .12s;user-select:none}
+.cobro-btn .icon-lbl{font-size:20px;display:block;margin-bottom:3px}
+.cobro-btn .txt-lbl{font-size:12px;font-weight:500;color:var(--txt)}
+.cobro-btn.sel-efec{background:var(--gbg);border-color:var(--g)}
+.cobro-btn.sel-trans{background:var(--pubg);border-color:var(--pu)}
+.cobro-btn:active{transform:scale(.97)}
+
+/* Description */
+.desc-area{width:100%;border:1px solid var(--brd2);border-radius:var(--r);padding:11px 12px;background:var(--bg);color:var(--txt);resize:none;font-size:15px;outline:none;line-height:1.4}
+.desc-area::placeholder{color:var(--txt3)}
+
+/* Audio recorder */
+.audio-row{display:flex;align-items:center;gap:10px}
+.rec-btn{width:46px;height:46px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .15s;flex-shrink:0}
+.rec-btn.idle{background:var(--bg2);border:1.5px solid var(--brd2)}
+.rec-btn.recording{background:var(--rebg);border:2px solid var(--re);animation:recpulse 1s infinite}
+.rec-btn.has-audio{background:var(--gbg);border:1.5px solid var(--gbrd)}
+@keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(163,45,45,.4)}50%{box-shadow:0 0 0 8px rgba(163,45,45,0)}}
+.rec-status{font-size:12px;color:var(--txt2);flex:1}
+.rec-timer{font-size:13px;font-weight:500;color:var(--re);font-variant-numeric:tabular-nums}
+audio{width:100%;height:36px;margin-top:6px}
+
+/* Mini fields */
+.mini-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini-f{background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r);padding:10px 12px}
+.mini-f label{display:block;font-size:10px;color:var(--txt3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em}
+.mini-f input{width:100%;border:none;background:transparent;font-size:14px;color:var(--txt);outline:none}
+.mini-f input::placeholder{color:var(--brd2)}
+
+/* Register button */
+.reg-btn{width:100%;padding:16px;background:var(--dark);color:#fff;border:none;border-radius:var(--rl);font-size:16px;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s;margin-top:4px}
+.reg-btn:active{transform:scale(.98);opacity:.9}
+.reg-btn:disabled{opacity:.35}
+
+/* Confirm flash */
+.conf-flash{background:var(--gbg);border:1px solid var(--gbrd);border-radius:var(--r);padding:12px 14px;display:none;animation:fadein .2s}
+.conf-flash.show{display:block}
+@keyframes fadein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.cf-ttl{font-size:13px;font-weight:600;color:var(--g)}
+.cf-det{font-size:12px;color:var(--g);margin-top:3px}
+
+/* Trip list */
+.trip-item{background:var(--bg);border-radius:var(--r);padding:12px 13px;margin-bottom:7px;display:flex;gap:10px;align-items:flex-start;border:0.5px solid var(--brd)}
+.ti-left{flex:1;min-width:0}
+.ti-row1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ti-time{font-size:12px;color:var(--txt3)}
+.ti-right{text-align:right;flex-shrink:0}
+.ti-neto{font-size:15px;font-weight:600;color:var(--g)}
+.ti-bruto{font-size:11px;color:var(--txt3)}
+.ti-del{font-size:11px;color:var(--re);cursor:pointer;margin-top:3px}
+.ti-desc{font-size:12px;color:var(--txt2);margin-top:4px}
+.ti-audio{margin-top:6px}
+.cobro-tag{font-size:10px;padding:2px 6px;border-radius:20px;font-weight:500;border:0.5px solid}
+.ct-efec{background:var(--gbg);color:var(--g);border-color:var(--gbrd)}
+.ct-trans{background:var(--pubg);color:var(--pu);border-color:var(--pubrd)}
+
+/* Badges */
+.badge{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;border:0.5px solid}
+.b-nave{background:var(--rebg);color:var(--re);border-color:var(--rebrd)}
+.b-cinco{background:var(--blbg);color:var(--bl);border-color:var(--blbrd)}
+.b-wapp{background:var(--gbg);color:var(--g);border-color:var(--gbrd)}
+.b-directo{background:var(--tlbg);color:var(--tl);border-color:var(--tlbrd)}
+.b-sync{background:var(--ambg);color:var(--am);border-color:var(--ambrd)}
+.b-synced{background:var(--gbg);color:var(--g);border-color:var(--gbrd)}
+
+/* ─── ADMIN ─── */
+#scr-admin{background:var(--bg2)}
+.admin-top{background:var(--dark);padding:14px 16px 0;flex-shrink:0}
+.admin-head{display:flex;align-items:center;justify-content:space-between;padding-bottom:12px}
+.admin-head .brand{font-size:15px;font-weight:600;color:#fff}
+.admin-head .online-dot{width:7px;height:7px;border-radius:50%;background:var(--re);margin-right:5px;display:inline-block;vertical-align:middle;transition:background .3s}
+.admin-head .online-dot.ok{background:#1D9E75}
+.atabs{display:flex;gap:0}
+.atab{flex:1;padding:10px 4px 11px;text-align:center;font-size:12px;color:rgba(255,255,255,.45);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s}
+.atab.active{color:#fff;border-bottom-color:#fff;font-weight:500}
+.admin-body{flex:1;overflow-y:auto;padding:14px}
+.otab-pane{display:none}
+.otab-pane.active{display:block}
+
+/* Summary cards */
+.sum-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.sumc{background:var(--bg);border-radius:var(--r);padding:10px 12px;border:0.5px solid var(--brd)}
+.sumv{font-size:18px;font-weight:600;color:var(--txt)}
+.suml{font-size:11px;color:var(--txt2);margin-top:2px}
+.sumv.g{color:var(--g)}.sumv.r{color:var(--re)}
+
+/* Driver row (admin) */
+.drv-row{background:var(--bg);border-radius:var(--r);padding:11px 13px;margin-bottom:7px;border:0.5px solid var(--brd)}
+.drv-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.drv-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.drv-nm{font-size:13px;font-weight:500;color:var(--txt)}
+.drv-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.ds{background:var(--bg2);border-radius:6px;padding:6px 7px}
+.dsv{font-size:12px;font-weight:500;color:var(--txt)}
+.dsl{font-size:10px;color:var(--txt3)}
+
+/* Card */
+.card{background:var(--bg);border-radius:var(--rl);padding:14px;margin-bottom:10px;border:0.5px solid var(--brd)}
+.field{margin-bottom:10px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:11px;color:var(--txt2);margin-bottom:5px}
+.field input,.field select{width:100%;background:var(--bg2);border:1px solid var(--brd2);border-radius:var(--r);padding:10px 12px;color:var(--txt);font-size:15px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--brd2)}
+.btn{width:100%;background:var(--bg2);border:1px solid var(--brd2);border-radius:var(--r);padding:11px;font-size:14px;font-weight:500;color:var(--txt);cursor:pointer;transition:opacity .15s}
+.btn:active{opacity:.75}
+.btnacc{background:var(--dark);color:#fff;border-color:var(--dark)}
+.btnrow{display:flex;gap:8px}
+.btnrow .btn{flex:1}
+
+/* Driver management */
+.drv-mgmt-item{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--brd)}
+.drv-mgmt-item:last-child{border-bottom:none}
+.dmi-info{flex:1}
+.dmi-name{font-size:13px;font-weight:500;color:var(--txt)}
+.dmi-user{font-size:11px;color:var(--txt3)}
+.dmi-del{font-size:11px;color:var(--re);cursor:pointer;padding:4px}
+
+/* Alert */
+.alert{border-radius:var(--r);padding:10px 12px;font-size:13px;margin:8px 0;border:1px solid;line-height:1.5}
+.alert.g{background:var(--gbg);color:var(--g);border-color:var(--gbrd)}
+.alert.r{background:var(--rebg);color:var(--re);border-color:var(--rebrd)}
+.alert.b{background:var(--blbg);color:var(--bl);border-color:var(--blbrd)}
+.alert.a{background:var(--ambg);color:var(--am);border-color:var(--ambrd)}
+
+/* Dates */
+.date-row{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.date-row input[type=date]{flex:1;background:var(--bg);border:1px solid var(--brd2);border-radius:var(--r);padding:9px 12px;color:var(--txt);font-size:14px;outline:none}
+.date-row .btn{width:auto;padding:9px 16px}
+
+/* AI output */
+.ai-out{background:var(--bg);border:0.5px solid var(--brd);border-radius:var(--rl);padding:14px;font-size:13px;color:var(--txt);line-height:1.8;white-space:pre-wrap;min-height:60px}
+
+/* Loading */
+.loading{text-align:center;padding:24px}
+.spinner{display:inline-block;width:20px;height:20px;border:2.5px solid var(--brd2);border-top-color:var(--txt);border-radius:50%;animation:sp .65s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--dark);color:#fff;font-size:13px;padding:9px 20px;border-radius:24px;opacity:0;transition:all .22s;pointer-events:none;z-index:999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Bottom spacer */
+.spacer{height:32px}
+
+/* Sec heading */
+.sh{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin:14px 0 8px}
+.sh:first-child{margin-top:0}
+
+/* Online indicator */
+.online-strip{font-size:11px;padding:5px 14px;text-align:center;display:none}
+.online-strip.offline{display:block;background:var(--ambg);color:var(--am)}
+.online-strip.syncing{display:block;background:var(--blbg);color:var(--bl)}
+
+/* GPS */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+@media(max-width:380px){
+  .canal-grid{grid-template-columns:1fr 1fr}
+  .cobro-row{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div class="scr active" id="scr-login">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="icon">🚗</div>
+      <h1>FlotaControl</h1>
+      <p>La Habana, Cuba</p>
+    </div>
+    <div class="login-field">
+      <label>Usuario</label>
+      <input type="text" id="li-user" placeholder="tu usuario" autocomplete="username" autocapitalize="none">
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="li-pass" placeholder="••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-err" id="li-err"></div>
+    <div class="login-info">FlotaControl · Transporte eléctrico</div>
+  </div>
+</div>
+
+<!-- ═══════════ DRIVER ═══════════ -->
+<div class="scr" id="scr-driver">
+  <div class="top-bar">
+    <div class="user">
+      <div class="av" id="drv-av">FC</div>
+      <div><div class="uname" id="drv-name">Conductor</div><div class="udate" id="drv-date"></div></div>
+    </div>
+    <button class="logout" onclick="doLogout()">Salir</button>
+  </div>
+  <div class="online-strip" id="drv-strip">Sin conexión — guardando localmente</div>
+
+  <div class="drv-body">
+
+    <div class="fcard">
+      <div class="sec-lbl">Canal de la carrera</div>
+      <div class="canal-grid">
+        <div class="cbtn" id="cb-directo" onclick="selCanal('directo')"><div class="cdot directo"></div><div><div class="cname">Directa</div><div class="ccom">Sin comisión</div></div></div>
+        <div class="cbtn" id="cb-cinco" onclick="selCanal('cinco')"><div class="cdot cinco"></div><div><div class="cname">Cinco</div><div class="ccom" id="lbl-cinco">10%</div></div></div>
+        <div class="cbtn" id="cb-wapp" onclick="selCanal('wapp')"><div class="cdot wapp"></div><div><div class="cname">WhatsApp</div><div class="ccom" id="lbl-wapp">10%</div></div></div>
+        <div class="cbtn" id="cb-nave" onclick="selCanal('nave')"><div class="cdot nave"></div><div><div class="cname">La Nave</div><div class="ccom" id="lbl-nave">20%</div></div></div>
+      </div>
+    </div>
+
+    <div class="fcard">
+      <div class="sec-lbl">Monto cobrado</div>
+      <div class="amt-wrap">
+        <div class="amt-cur">CUP</div>
+        <input class="amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
+      </div>
+      <div class="net-prev" id="net-prev"></div>
+    </div>
+
+    <div class="fcard">
+      <div class="sec-lbl">Forma de cobro</div>
+      <div class="cobro-row">
+        <div class="cobro-btn" id="co-efec" onclick="selCobro('efectivo')">
+          <span class="icon-lbl">💵</span>
+          <span class="txt-lbl">Efectivo</span>
+        </div>
+        <div class="cobro-btn" id="co-trans" onclick="selCobro('transferencia')">
+          <span class="icon-lbl">📲</span>
+          <span class="txt-lbl">Transferencia</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fcard">
+      <div class="sec-lbl">Descripción del servicio</div>
+      <textarea class="desc-area" id="f-desc" rows="2" placeholder="Descripción del servicio, cliente, observaciones..."></textarea>
+
+      <div style="margin-top:12px">
+        <div class="sec-lbl">Nota de voz (opcional)</div>
+        <div class="audio-row">
+          <button class="rec-btn idle" id="rec-btn" onclick="toggleRec()">🎤</button>
+          <div style="flex:1">
+            <div class="rec-status" id="rec-status">Toca para grabar una nota de voz</div>
+            <div class="rec-timer" id="rec-timer" style="display:none">00:00</div>
+          </div>
+        </div>
+        <audio id="audio-preview" controls style="display:none;width:100%;margin-top:8px"></audio>
+      </div>
+    </div>
+
+    <div class="fcard">
+      <div class="sec-lbl">Ruta (opcional)</div>
+      <div class="mini-row">
+        <div class="mini-f"><label>Origen</label><input type="text" id="f-org" placeholder="Vedado"></div>
+        <div class="mini-f"><label>Destino</label><input type="text" id="f-dst" placeholder="Aeropuerto"></div>
+      </div>
+    </div>
+
+    <button class="reg-btn" onclick="regTrip()">Registrar carrera</button>
+
+    <div class="conf-flash" id="conf-flash" style="margin-top:12px">
+      <div class="cf-ttl" id="cf-ttl">Carrera registrada</div>
+      <div class="cf-det" id="cf-det"></div>
+    </div>
+
+    <div class="sh" style="margin-top:20px">Mis carreras de hoy</div>
+    <div id="drv-trips"><div style="font-size:13px;color:var(--txt3);padding:6px 0">Sin carreras registradas todavía.</div></div>
+    <div class="spacer"></div>
+  </div>
+</div>
+
+<!-- ═══════════ ADMIN ═══════════ -->
+<div class="scr" id="scr-admin">
+  <div class="admin-top">
+    <div class="admin-head">
+      <div class="brand">
+        <span class="online-dot" id="a-odot"></span>FlotaControl Admin
+      </div>
+      <button class="logout" style="color:rgba(255,255,255,.45);background:transparent;border:none;cursor:pointer;font-size:12px" onclick="doLogout()">Salir</button>
+    </div>
+    <div class="atabs">
+      <div class="atab active" onclick="showATab('resumen',this)">Resumen</div>
+      <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
+      <div class="atab" onclick="showATab('gps',this)">GPS</div>
+      <div class="atab" onclick="showATab('ia',this)">IA</div>
+      <div class="atab" onclick="showATab('config',this)">Config</div>
+    </div>
+  </div>
+  <div class="online-strip" id="adm-strip"></div>
+  <div class="admin-body">
+
+    <!-- RESUMEN -->
+    <div class="otab-pane active" id="atp-resumen">
+      <div class="date-row">
+        <input type="date" id="a-date">
+        <button class="btn" onclick="loadResumen()">Ver</button>
+      </div>
+      <div class="sum-grid">
+        <div class="sumc"><div class="sumv g" id="a-neto">—</div><div class="suml">Neto total</div></div>
+        <div class="sumc"><div class="sumv r" id="a-com">—</div><div class="suml">Comisiones</div></div>
+        <div class="sumc"><div class="sumv" id="a-bruto">—</div><div class="suml">Bruto total</div></div>
+        <div class="sumc"><div class="sumv" id="a-carr">—</div><div class="suml">Carreras</div></div>
+      </div>
+      <div id="a-drivers"></div>
+      <div class="sh">Todas las carreras</div>
+      <div id="a-trips"><div style="font-size:13px;color:var(--txt3)">Selecciona una fecha.</div></div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- CHOFERES -->
+    <div class="otab-pane" id="atp-choferes">
+      <div class="sh">Conductores activos</div>
+      <div class="card" id="drvmgmt-list"><div style="font-size:13px;color:var(--txt3)">No hay conductores.</div></div>
+      <div class="sh">Agregar conductor</div>
+      <div class="card">
+        <div class="field"><label>Nombre completo</label><input type="text" id="nd-name" placeholder="Carlos Martínez"></div>
+        <div class="field"><label>Usuario (para el login)</label><input type="text" id="nd-user" placeholder="carlos" autocapitalize="none"></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="nd-pass" placeholder="••••"></div>
+        <button class="btn btnacc" onclick="addDriver()">Crear cuenta</button>
+        <div id="nd-msg"></div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- GPS -->
+    <div class="otab-pane" id="atp-gps">
+      <div class="sh">Conexión Traccar</div>
+      <div class="card">
+        <div class="field"><label>URL servidor</label><input type="url" id="tc-url" placeholder="https://demo.traccar.org"></div>
+        <div class="field"><label>Email</label><input type="email" id="tc-email"></div>
+        <div class="field"><label>Contraseña</label><input type="password" id="tc-pass"></div>
+        <button class="btn btnacc" onclick="connTraccar()">Conectar</button>
+        <div id="tc-msg"></div>
+      </div>
+      <div class="date-row">
+        <input type="date" id="gps-date">
+        <button class="btn" onclick="loadGPS()">Cargar GPS</button>
+      </div>
+      <div id="gps-list"><div style="font-size:13px;color:var(--txt3)">Conecta Traccar y selecciona una fecha.</div></div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- IA -->
+    <div class="otab-pane" id="atp-ia">
+      <div class="date-row">
+        <input type="date" id="ai-date">
+        <button class="btn btnacc" onclick="runAI()">Analizar</button>
+      </div>
+      <div class="sum-grid">
+        <div class="sumc"><div class="sumv" id="ai-km">—</div><div class="suml">Km totales</div></div>
+        <div class="sumc"><div class="sumv g" id="ai-neto">—</div><div class="suml">Neto CUP</div></div>
+        <div class="sumc"><div class="sumv" id="ai-cpm">—</div><div class="suml">CUP/km</div></div>
+        <div class="sumc"><div class="sumv" id="ai-carr">—</div><div class="suml">Carreras</div></div>
+      </div>
+      <div class="sh">Análisis inteligente</div>
+      <div class="ai-out" id="ai-out">Presiona <strong>Analizar</strong> para revisar los datos GPS e ingresos del día.</div>
+      <div class="loading" id="ai-load" style="display:none"><div class="spinner"></div><div style="font-size:13px;color:var(--txt2);margin-top:10px">Analizando datos...</div></div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- CONFIG -->
+    <div class="otab-pane" id="atp-config">
+      <div class="sh">Comisiones por plataforma</div>
+      <div class="card">
+        <div class="g2">
+          <div class="field"><label>La Nave (%)</label><input type="number" id="cfg-nave" value="20" min="0" max="100"></div>
+          <div class="field"><label>Cinco (%)</label><input type="number" id="cfg-cinco" value="10" min="0" max="100"></div>
+          <div class="field"><label>WhatsApp (%)</label><input type="number" id="cfg-wapp" value="10" min="0" max="100"></div>
+          <div class="field"><label>Directa (%)</label><input type="number" value="0" readonly></div>
+        </div>
+        <button class="btn btnacc" onclick="saveCfg()">Guardar comisiones</button>
+      </div>
+
+      <div class="sh">Sincronización Firebase (opcional)</div>
+      <div class="card">
+        <div class="alert b" style="margin-bottom:10px">Firebase sincroniza los datos entre todos los teléfonos automáticamente, incluso con internet intermitente.</div>
+        <div class="field"><label>API Key</label><input type="text" id="fb-key" placeholder="AIzaSy..."></div>
+        <div class="field"><label>Database URL</label><input type="url" id="fb-url" placeholder="https://tu-proyecto.firebaseio.com"></div>
+        <div class="field"><label>Project ID</label><input type="text" id="fb-proj" placeholder="tu-proyecto"></div>
+        <button class="btn btnacc" onclick="saveFirebase()">Conectar Firebase</button>
+        <div id="fb-msg"></div>
+        <div style="margin-top:10px;font-size:11px;color:var(--txt3)">Sin Firebase la app funciona localmente. Los datos se exportan manualmente por chofer.</div>
+      </div>
+
+      <div class="sh">Exportar datos</div>
+      <div class="card">
+        <div class="date-row" style="margin-bottom:8px">
+          <input type="date" id="exp-date">
+          <button class="btn" onclick="exportData()">Exportar JSON</button>
+        </div>
+        <button class="btn" onclick="importData()">Importar JSON de chofer</button>
+        <input type="file" id="imp-file" accept=".json" style="display:none" onchange="doImport(this)">
+      </div>
+
+      <div class="sh">Contraseña de administrador</div>
+      <div class="card">
+        <div class="field"><label>Nueva contraseña</label><input type="password" id="cfg-apass" placeholder="Nueva contraseña"></div>
+        <button class="btn btnacc" onclick="changeAdminPass()">Cambiar contraseña</button>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase CDN (optional, loaded dynamically) -->
+<script>
+// ════════════════════════════════════════
+// CONFIG & STORAGE
+// ════════════════════════════════════════
+const ADMIN_USER = 'admin';
+const DEFAULT_ADMIN_PASS = '9928';
+const DB_NAME = 'flotacontrol_db';
+const DB_VER = 2;
+const SRC = { nave:'La Nave', cinco:'Cinco', wapp:'WhatsApp', directo:'Directa' };
+const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo' };
+const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
+
+let currentUser = null;
+let selCan = null, selCobro = null;
+let idbDB = null;
+let isOnline = navigator.onLine;
+let fbRef = null; // Firebase database reference
+let mediaRec = null, audioChunks = [], recTimer = null, recSecs = 0;
+let currentAudioB64 = null;
+let tcDevices = [], tcConn = false;
+let gpsCache = {};
+
+// ── Config in localStorage ──
+function getCfg() {
+  try { return JSON.parse(localStorage.getItem('fc_cfg') || '{}'); } catch(e) { return {}; }
+}
+function setCfg(cfg) { localStorage.setItem('fc_cfg', JSON.stringify(cfg)); }
+function getDrivers() {
+  try { return JSON.parse(localStorage.getItem('fc_drivers') || '[]'); } catch(e) { return []; }
+}
+function setDrivers(d) { localStorage.setItem('fc_drivers', JSON.stringify(d)); }
+
+// ════════════════════════════════════════
+// INDEXEDDB
+// ════════════════════════════════════════
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('trips')) {
+        const s = db.createObjectStore('trips', { keyPath: 'id' });
+        s.createIndex('date', 'date', { unique: false });
+        s.createIndex('synced', 'synced', { unique: false });
+      }
+    };
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbSaveTrip(trip) {
+  const tx = idbDB.transaction('trips', 'readwrite');
+  return new Promise((res, rej) => {
+    const req = tx.objectStore('trips').put(trip);
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbGetTripsByDate(date) {
+  const tx = idbDB.transaction('trips', 'readonly');
+  const idx = tx.objectStore('trips').index('date');
+  return new Promise((res, rej) => {
+    const req = idx.getAll(date);
+    req.onsuccess = () => res(req.result || []);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbDeleteTrip(id) {
+  const tx = idbDB.transaction('trips', 'readwrite');
+  return new Promise((res, rej) => {
+    const req = tx.objectStore('trips').delete(id);
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbGetUnsynced() {
+  const tx = idbDB.transaction('trips', 'readonly');
+  const idx = tx.objectStore('trips').index('synced');
+  return new Promise((res, rej) => {
+    const req = idx.getAll(0);
+    req.onsuccess = () => res(req.result || []);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+// ════════════════════════════════════════
+// FIREBASE SYNC
+// ════════════════════════════════════════
+async function initFirebase() {
+  const cfg = getCfg();
+  if (!cfg.firebase || !cfg.firebase.apiKey) return;
+  try {
+    if (typeof firebase === 'undefined') {
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js');
+    }
+    if (!firebase.apps.length) {
+      firebase.initializeApp({
+        apiKey: cfg.firebase.apiKey,
+        databaseURL: cfg.firebase.databaseURL,
+        projectId: cfg.firebase.projectId
+      });
+    }
+    fbRef = firebase.database();
+    // Enable offline persistence
+    firebase.database().ref('.info/connected').on('value', snap => {
+      isOnline = snap.val() === true;
+      updateOnlineUI();
+    });
+    console.log('Firebase ready');
+    await syncPending();
+  } catch(e) { console.warn('Firebase failed:', e); }
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function syncPending() {
+  if (!fbRef || !isOnline) return;
+  const pending = await dbGetUnsynced();
+  for (const trip of pending) {
+    try {
+      const stripped = { ...trip };
+      // Limit audio size for Firebase (max 10MB per node)
+      if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
+      await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
+      await dbSaveTrip({ ...trip, synced: 1 });
+    } catch(e) { console.warn('Sync failed for', trip.id); }
+  }
+  updateOnlineUI();
+}
+
+async function pushTrip(trip) {
+  if (!fbRef || !isOnline) return false;
+  try {
+    const stripped = { ...trip };
+    if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
+    await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
+    return true;
+  } catch(e) { return false; }
+}
+
+// ════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════
+function doLogin() {
+  const user = $('li-user').value.trim().toLowerCase();
+  const pass = $('li-pass').value;
+  $('li-err').textContent = '';
+
+  if (user === ADMIN_USER || user === 'admin') {
+    const cfg = getCfg();
+    const adminPass = cfg.adminPass || DEFAULT_ADMIN_PASS;
+    if (pass === adminPass) {
+      currentUser = { role: 'admin', name: 'Administrador', id: 'admin' };
+      showScreen('admin');
+      return;
+    }
+  }
+  // Check driver accounts
+  const drivers = getDrivers();
+  const driver = drivers.find(d => d.username.toLowerCase() === user && d.password === pass);
+  if (driver) {
+    currentUser = { role: 'driver', name: driver.name, id: driver.id, username: driver.username };
+    showDriverScreen();
+    return;
+  }
+  $('li-err').textContent = 'Usuario o contraseña incorrectos';
+  $('li-pass').value = '';
+  $('li-pass').focus();
+}
+
+function doLogout() {
+  currentUser = null;
+  selCan = null; selCobro = null; currentAudioB64 = null;
+  stopRecIfActive();
+  $('li-user').value = '';
+  $('li-pass').value = '';
+  $('li-err').textContent = '';
+  showScreen('login');
+}
+
+// ════════════════════════════════════════
+// SCREENS
+// ════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.scr').forEach(s => s.classList.remove('active'));
+  $('scr-' + name).classList.add('active');
+}
+
+function showDriverScreen() {
+  showScreen('driver');
+  $('drv-av').textContent = currentUser.name.slice(0,2).toUpperCase();
+  $('drv-name').textContent = currentUser.name;
+  $('drv-date').textContent = new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+  updComLabels();
+  loadDriverTrips();
+  updateOnlineUI();
+}
+
+function showATab(name, el) {
+  document.querySelectorAll('.otab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.atab').forEach(t => t.classList.remove('active'));
+  $('atp-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name === 'resumen') loadResumen();
+  if (name === 'choferes') renderDriverMgmt();
+  if (name === 'config') loadConfigUI();
+}
+
+// ════════════════════════════════════════
+// DRIVER FORM
+// ════════════════════════════════════════
+function selCanal(src) {
+  selCan = src;
+  document.querySelectorAll('.cbtn').forEach(b => b.className = 'cbtn');
+  $('cb-' + src).className = 'cbtn sel-' + src;
+  updNet();
+}
+
+function selCobro(type) {
+  selCobro = type;
+  $('co-efec').className = 'cobro-btn' + (type === 'efectivo' ? ' sel-efec' : '');
+  $('co-trans').className = 'cobro-btn' + (type === 'transferencia' ? ' sel-trans' : '');
+}
+
+function getCom(s) {
+  const cfg = getCfg();
+  const c = cfg.commissions || { nave:20, cinco:10, wapp:10 };
+  return { nave: c.nave||20, cinco: c.cinco||10, wapp: c.wapp||10, directo: 0 }[s] ?? 0;
+}
+
+function updNet() {
+  const amt = parseFloat($('f-amt').value) || 0;
+  if (!amt || !selCan) { $('net-prev').textContent = ''; return; }
+  const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
+  $('net-prev').textContent = r > 0 ? `Neto: ${fC(net)}  (−${fC(com)} comisión)` : `Neto: ${fC(net)}  sin comisión`;
+}
+
+function updComLabels() {
+  const cfg = getCfg();
+  const c = cfg.commissions || {};
+  $('lbl-nave').textContent  = (c.nave||20)  + '% comisión';
+  $('lbl-cinco').textContent = (c.cinco||10) + '% comisión';
+  $('lbl-wapp').textContent  = (c.wapp||10)  + '% comisión';
+}
+
+async function regTrip() {
+  if (!selCan) { toast('Selecciona el canal'); return; }
+  const amt = parseFloat($('f-amt').value);
+  if (!amt || amt <= 0) { toast('Ingresa el monto cobrado'); return; }
+  if (!selCobro) { toast('Selecciona la forma de cobro'); return; }
+
+  const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
+  const t = todayStr();
+  const trip = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    date: t, time: nowT(),
+    driverId: currentUser.id, driverName: currentUser.name,
+    source: selCan, amount: amt, commRate: r, commAmount: com, netAmount: net,
+    cobro: selCobro,
+    desc: $('f-desc').value.trim(),
+    origin: $('f-org').value.trim(),
+    destination: $('f-dst').value.trim(),
+    audioB64: currentAudioB64 || null,
+    synced: 0
+  };
+
+  await dbSaveTrip(trip);
+
+  // Try Firebase sync
+  const synced = await pushTrip(trip);
+  if (synced) await dbSaveTrip({ ...trip, synced: 1 });
+
+  // Reset form
+  $('f-amt').value = ''; $('f-desc').value = ''; $('f-org').value = ''; $('f-dst').value = '';
+  $('net-prev').textContent = '';
+  resetAudio();
+
+  // Flash confirmation
+  const cf = $('conf-flash');
+  $('cf-ttl').textContent = 'Carrera registrada ' + (synced ? '✓' : '(guardada offline)');
+  $('cf-det').textContent = `${SRC[selCan]} · ${fC(amt)} → Neto: ${fC(net)} · ${selCobro === 'efectivo' ? 'Efectivo' : 'Transferencia'}`;
+  cf.classList.add('show');
+  setTimeout(() => cf.classList.remove('show'), 3500);
+
+  loadDriverTrips();
+}
+
+async function loadDriverTrips() {
+  const t = todayStr();
+  const all = await dbGetTripsByDate(t);
+  const mine = all.filter(r => r.driverId === currentUser.id).sort((a,b) => b.time.localeCompare(a.time));
+  const el = $('drv-trips');
+  if (!mine.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:4px 0">Sin carreras registradas todavía.</div>'; return; }
+  el.innerHTML = mine.map(r => tripHTML(r, true)).join('');
+}
+
+// ════════════════════════════════════════
+// AUDIO RECORDING
+// ════════════════════════════════════════
+async function toggleRec() {
+  if (mediaRec && mediaRec.state === 'recording') {
+    stopRec();
+  } else if (currentAudioB64) {
+    resetAudio();
+  } else {
+    startRec();
+  }
+}
+
+async function startRec() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = []; recSecs = 0;
+    mediaRec = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg' });
+    mediaRec.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+    mediaRec.onstop = () => {
+      const blob = new Blob(audioChunks, { type: mediaRec.mimeType });
+      const url = URL.createObjectURL(blob);
+      $('audio-preview').src = url;
+      $('audio-preview').style.display = 'block';
+      const reader = new FileReader();
+      reader.onload = e => { currentAudioB64 = e.target.result; };
+      reader.readAsDataURL(blob);
+      stream.getTracks().forEach(t => t.stop());
+      $('rec-btn').className = 'rec-btn has-audio';
+      $('rec-btn').textContent = '🗑';
+      $('rec-status').textContent = 'Nota grabada — toca para borrar';
+      $('rec-timer').style.display = 'none';
+      clearInterval(recTimer);
+    };
+    mediaRec.start(200);
+    $('rec-btn').className = 'rec-btn recording';
+    $('rec-btn').textContent = '⏹';
+    $('rec-status').textContent = 'Grabando...';
+    $('rec-timer').style.display = 'block';
+    recTimer = setInterval(() => {
+      recSecs++;
+      const m = String(Math.floor(recSecs/60)).padStart(2,'0');
+      const s = String(recSecs%60).padStart(2,'0');
+      $('rec-timer').textContent = m+':'+s;
+    }, 1000);
+  } catch(e) { toast('No se pudo acceder al micrófono'); }
+}
+
+function stopRec() { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); }
+function stopRecIfActive() { if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); } clearInterval(recTimer); }
+
+function resetAudio() {
+  stopRecIfActive();
+  currentAudioB64 = null; audioChunks = [];
+  $('audio-preview').src = ''; $('audio-preview').style.display = 'none';
+  $('rec-btn').className = 'rec-btn idle'; $('rec-btn').textContent = '🎤';
+  $('rec-status').textContent = 'Toca para grabar una nota de voz';
+  $('rec-timer').style.display = 'none'; $('rec-timer').textContent = '00:00';
+}
+
+// ════════════════════════════════════════
+// ADMIN: RESUMEN
+// ════════════════════════════════════════
+async function loadResumen() {
+  const date = $('a-date').value || todayStr();
+  $('a-date').value = date;
+
+  let trips = await dbGetTripsByDate(date);
+
+  // Also try Firebase
+  if (fbRef && isOnline) {
+    try {
+      const snap = await fbRef.ref('trips/' + date).once('value');
+      if (snap.val()) {
+        const fbTrips = Object.values(snap.val());
+        // Merge with local (Firebase wins for synced trips)
+        const localIds = new Set(trips.map(t => t.id));
+        for (const ft of fbTrips) {
+          if (!localIds.has(ft.id)) { await dbSaveTrip({ ...ft, synced: 1 }); trips.push(ft); }
+        }
+      }
+    } catch(e) {}
+  }
+
+  const bruto = trips.reduce((s,r)=>s+r.amount,0);
+  const com   = trips.reduce((s,r)=>s+r.commAmount,0);
+  const neto  = trips.reduce((s,r)=>s+r.netAmount,0);
+  $('a-neto').textContent  = neto  ? fC(neto)  : '—';
+  $('a-com').textContent   = com   ? '-'+fC(com): '—';
+  $('a-bruto').textContent = bruto ? fC(bruto)  : '—';
+  $('a-carr').textContent  = trips.length || '—';
+
+  // Per driver
+  const byD = {};
+  getDrivers().forEach((d,i) => { byD[d.id] = { name:d.name, idx:i, c:0, b:0, n:0, co:0 }; });
+  trips.forEach(r => {
+    if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, b:0, n:0, co:0 };
+    byD[r.driverId].c++; byD[r.driverId].b+=r.amount; byD[r.driverId].n+=r.netAmount; byD[r.driverId].co+=r.commAmount;
+  });
+  const gDay = gpsCache[date] || {};
+  $('a-drivers').innerHTML = Object.entries(byD).map(([id,d]) => {
+    const [bg,col] = COLS[d.idx % COLS.length];
+    const gps = Object.values(gDay).find(g => g.driverId === id) || null;
+    const cpm = gps && gps.km > 0 ? Math.round(d.n/gps.km) : 0;
+    return `<div class="drv-row"><div class="drv-head">
+      <div class="drv-av" style="background:${bg};color:${col}">${d.name.slice(0,2).toUpperCase()}</div>
+      <div class="drv-nm">${d.name}</div>
+      <div style="margin-left:auto;font-size:11px;color:var(--txt3)">${d.c} carrera${d.c!==1?'s':''}</div>
+    </div><div class="drv-stats">
+      <div class="ds"><div class="dsv" style="color:var(--g)">${Math.round(d.n).toLocaleString()}</div><div class="dsl">Neto</div></div>
+      <div class="ds"><div class="dsv" style="color:var(--re)">-${Math.round(d.co).toLocaleString()}</div><div class="dsl">Comis.</div></div>
+      <div class="ds"><div class="dsv">${gps ? fK(gps.km) : '—'}</div><div class="dsl">Km</div></div>
+      <div class="ds"><div class="dsv">${cpm||'—'}</div><div class="dsl">CUP/km</div></div>
+    </div></div>`;
+  }).join('') || '<div style="font-size:13px;color:var(--txt3)">Sin datos.</div>';
+
+  const sorted = [...trips].sort((a,b) => b.time.localeCompare(a.time));
+  $('a-trips').innerHTML = sorted.length ? sorted.map(r => tripHTML(r, false)).join('') : '<div style="font-size:13px;color:var(--txt3)">Sin carreras.</div>';
+}
+
+// ════════════════════════════════════════
+// TRIP HTML
+// ════════════════════════════════════════
+function tripHTML(r, showDel) {
+  const cobroTag = r.cobro === 'efectivo'
+    ? '<span class="cobro-tag ct-efec">💵 Efectivo</span>'
+    : r.cobro === 'transferencia'
+    ? '<span class="cobro-tag ct-trans">📲 Transferencia</span>'
+    : '';
+  const syncTag = r.synced ? '<span class="badge b-synced" style="font-size:9px">✓ sync</span>' : '<span class="badge b-sync" style="font-size:9px">⏳ local</span>';
+  const del = showDel ? `<div class="ti-del" onclick="delTrip('${r.id}','${r.date}')">eliminar</div>` : '';
+  const audioHTML = r.audioB64 && r.audioB64 !== '[audio-local-only]'
+    ? `<div class="ti-audio"><audio controls src="${r.audioB64}" style="width:100%;height:32px"></audio></div>` : '';
+  return `<div class="trip-item">
+    <div class="ti-left">
+      <div class="ti-row1">
+        <span class="badge ${BDGE[r.source]}">${SRC[r.source]}</span>
+        ${cobroTag}
+        <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
+        ${syncTag}
+      </div>
+      ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination}</div>` : ''}
+      ${r.desc ? `<div class="ti-desc">${r.desc}</div>` : ''}
+      ${audioHTML}
+    </div>
+    <div class="ti-right">
+      <div class="ti-neto">${fC(r.netAmount)}</div>
+      <div class="ti-bruto">${fC(r.amount)} bruto</div>
+      ${del}
+    </div>
+  </div>`;
+}
+
+async function delTrip(id, date) {
+  await dbDeleteTrip(id);
+  if (fbRef && isOnline) { try { await fbRef.ref(`trips/${date}/${id}`).remove(); } catch(e) {} }
+  if (currentUser.role === 'driver') loadDriverTrips();
+  else loadResumen();
+  toast('Carrera eliminada');
+}
+
+// ════════════════════════════════════════
+// DRIVER MANAGEMENT
+// ════════════════════════════════════════
+function renderDriverMgmt() {
+  const drivers = getDrivers();
+  const el = $('drvmgmt-list');
+  if (!drivers.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3)">No hay conductores creados.</div>'; return; }
+  el.innerHTML = drivers.map(d => `
+    <div class="drv-mgmt-item">
+      <div class="dmi-info">
+        <div class="dmi-name">${d.name}</div>
+        <div class="dmi-user">Usuario: ${d.username}</div>
+      </div>
+      <div class="dmi-del" onclick="removeDriver('${d.id}')">Eliminar</div>
+    </div>`).join('');
+}
+
+function addDriver() {
+  const name = $('nd-name').value.trim();
+  const user = $('nd-user').value.trim().toLowerCase();
+  const pass = $('nd-pass').value;
+  if (!name || !user || !pass) { $('nd-msg').innerHTML = '<div class="alert r" style="margin-top:8px">Completa todos los campos</div>'; return; }
+  const drivers = getDrivers();
+  if (drivers.find(d => d.username === user)) { $('nd-msg').innerHTML = '<div class="alert r" style="margin-top:8px">Ese usuario ya existe</div>'; return; }
+  drivers.push({ id: 'd' + Date.now(), name, username: user, password: pass });
+  setDrivers(drivers);
+  $('nd-name').value = ''; $('nd-user').value = ''; $('nd-pass').value = '';
+  $('nd-msg').innerHTML = `<div class="alert g" style="margin-top:8px">${name} creado correctamente</div>`;
+  setTimeout(() => { $('nd-msg').innerHTML = ''; }, 3000);
+  renderDriverMgmt();
+}
+
+function removeDriver(id) {
+  const drivers = getDrivers().filter(d => d.id !== id);
+  setDrivers(drivers);
+  renderDriverMgmt();
+  toast('Conductor eliminado');
+}
+
+// ════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════
+function loadConfigUI() {
+  const cfg = getCfg();
+  $('cfg-nave').value  = cfg.commissions?.nave  || 20;
+  $('cfg-cinco').value = cfg.commissions?.cinco || 10;
+  $('cfg-wapp').value  = cfg.commissions?.wapp  || 10;
+  if (cfg.firebase) {
+    $('fb-key').value  = cfg.firebase.apiKey    || '';
+    $('fb-url').value  = cfg.firebase.databaseURL || '';
+    $('fb-proj').value = cfg.firebase.projectId  || '';
+  }
+  const today = todayStr();
+  try { $('exp-date').value = today; } catch(e) {}
+}
+
+function saveCfg() {
+  const cfg = getCfg();
+  cfg.commissions = { nave: parseInt($('cfg-nave').value)||20, cinco: parseInt($('cfg-cinco').value)||10, wapp: parseInt($('cfg-wapp').value)||10 };
+  setCfg(cfg);
+  updComLabels();
+  toast('Comisiones guardadas');
+}
+
+function changeAdminPass() {
+  const np = $('cfg-apass').value;
+  if (!np || np.length < 4) { toast('La contraseña debe tener al menos 4 caracteres'); return; }
+  const cfg = getCfg(); cfg.adminPass = np; setCfg(cfg);
+  $('cfg-apass').value = '';
+  toast('Contraseña actualizada');
+}
+
+async function saveFirebase() {
+  const apiKey = $('fb-key').value.trim();
+  const dbURL  = $('fb-url').value.trim();
+  const projId = $('fb-proj').value.trim();
+  if (!apiKey || !dbURL) { $('fb-msg').innerHTML = '<div class="alert r" style="margin-top:8px">Ingresa API Key y Database URL</div>'; return; }
+  const cfg = getCfg();
+  cfg.firebase = { apiKey, databaseURL: dbURL, projectId: projId };
+  setCfg(cfg);
+  await initFirebase();
+  $('fb-msg').innerHTML = '<div class="alert g" style="margin-top:8px">Firebase configurado. Sincronizando...</div>';
+  setTimeout(() => { $('fb-msg').innerHTML = ''; }, 4000);
+}
+
+// ════════════════════════════════════════
+// EXPORT / IMPORT
+// ════════════════════════════════════════
+async function exportData() {
+  const date = $('exp-date').value || todayStr();
+  const trips = await dbGetTripsByDate(date);
+  const data = { date, trips, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `flota-${date}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  toast(`${trips.length} carrera(s) exportada(s)`);
+}
+
+function importData() { $('imp-file').click(); }
+
+async function doImport(input) {
+  const file = input.files[0]; if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.trips) { toast('Archivo inválido'); return; }
+    for (const trip of data.trips) { await dbSaveTrip(trip); }
+    toast(`${data.trips.length} carrera(s) importada(s)`);
+    loadResumen();
+  } catch(e) { toast('Error al importar archivo'); }
+  input.value = '';
+}
+
+// ════════════════════════════════════════
+// GPS / TRACCAR
+// ════════════════════════════════════════
+async function connTraccar() {
+  const url   = $('tc-url').value.trim();
+  const email = $('tc-email').value.trim();
+  const pass  = $('tc-pass').value;
+  if (!email || !pass) { showTcMsg('Ingresa email y contraseña','r'); return; }
+  const cfg = getCfg(); cfg.traccar = { url, email, pass }; setCfg(cfg);
+  try {
+    const res = await fetch(url+'/api/devices', { headers: { 'Authorization':'Basic '+btoa(email+':'+pass), 'Accept':'application/json' } });
+    if (!res.ok) throw new Error();
+    tcDevices = await res.json(); tcConn = true;
+    showTcMsg(`Conectado — ${tcDevices.length} dispositivo(s)`, 'g');
+  } catch(e) { tcConn = false; showTcMsg('No se pudo conectar. Verifica credenciales.','r'); }
+}
+
+function showTcMsg(m,t) { $('tc-msg').innerHTML=`<div class="alert ${t}" style="margin-top:8px">${m}</div>`; setTimeout(()=>{ if($('tc-msg'))$('tc-msg').innerHTML=''; },4000); }
+
+async function loadGPS() {
+  if (!tcConn) { showTcMsg('Conecta primero a Traccar','r'); return; }
+  const date = $('gps-date').value || todayStr();
+  const from = date+'T00:00:00.000Z', to = date+'T23:59:59.999Z';
+  const list = $('gps-list');
+  list.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const cfg = getCfg(); if (!gpsCache[date]) gpsCache[date] = {};
+  const drivers = getDrivers();
+  let html = '';
+  for (let i=0; i<tcDevices.length; i++) {
+    const d = tcDevices[i];
+    const driver = drivers[i] || null;
+    const dname = driver ? driver.name : d.name;
+    const did = driver ? driver.id : d.id;
+    const [bg,col] = COLS[i%COLS.length];
+    const fp = `?deviceId=${d.id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    const aH = { 'Authorization':'Basic '+btoa(cfg.traccar.email+':'+cfg.traccar.pass), 'Accept':'application/json' };
+    let km=0,stops=0,vmax=0;
+    try {
+      const [sum,stp] = await Promise.all([
+        fetch(cfg.traccar.url+'/api/reports/summary'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[]),
+        fetch(cfg.traccar.url+'/api/reports/stops'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[])
+      ]);
+      if (sum.length) { km=Math.round(sum[0].distance/100)/10; vmax=Math.round((sum[0].maxSpeed||0)*1.852); }
+      stops = stp.length;
+    } catch(e) {}
+    gpsCache[date][d.id] = { km, stops, vmax, name: dname, driverId: did };
+    html += `<div class="drv-row"><div class="drv-head"><div class="drv-av" style="background:${bg};color:${col}">${dname.slice(0,2).toUpperCase()}</div><div class="drv-nm">${dname}</div></div>
+    <div class="drv-stats">
+      <div class="ds"><div class="dsv">${fK(km)}</div><div class="dsl">Km</div></div>
+      <div class="ds"><div class="dsv">${stops}</div><div class="dsl">Paradas</div></div>
+      <div class="ds"><div class="dsv">${vmax}</div><div class="dsl">Vel.máx.</div></div>
+      <div class="ds"><div class="dsv" style="color:var(--txt3)">—</div><div class="dsl">CUP/km</div></div>
+    </div></div>`;
+  }
+  list.innerHTML = html || '<div style="font-size:13px;color:var(--txt3)">Sin datos GPS para esta fecha.</div>';
+}
+
+// ════════════════════════════════════════
+// AI ANALYSIS
+// ════════════════════════════════════════
+async function runAI() {
+  const date = $('ai-date').value || todayStr();
+  let trips = await dbGetTripsByDate(date);
+  if (fbRef && isOnline) {
+    try {
+      const snap = await fbRef.ref('trips/'+date).once('value');
+      if (snap.val()) {
+        const fbT = Object.values(snap.val());
+        const lIds = new Set(trips.map(t=>t.id));
+        fbT.forEach(ft => { if (!lIds.has(ft.id)) trips.push(ft); });
+      }
+    } catch(e) {}
+  }
+  const bruto=trips.reduce((s,r)=>s+r.amount,0), com=trips.reduce((s,r)=>s+r.commAmount,0), neto=trips.reduce((s,r)=>s+r.netAmount,0);
+  if (tcConn && !gpsCache[date]) { $('gps-date').value = date; await loadGPS(); }
+  const gDay = gpsCache[date] || {};
+  const totalKm = Object.values(gDay).reduce((s,g)=>s+(g.km||0),0);
+  const cpm = totalKm>0 ? Math.round(neto/totalKm) : 0;
+  $('ai-km').textContent   = totalKm ? fK(totalKm) : '—';
+  $('ai-neto').textContent = neto    ? fC(neto)    : '—';
+  $('ai-cpm').textContent  = cpm     ? cpm.toLocaleString() : '—';
+  $('ai-carr').textContent = trips.length || '—';
+  const gpsL = Object.values(gDay).map(g=>`- ${g.name}: ${g.km} km, ${g.stops} paradas, vel.máx. ${g.vmax} km/h`).join('\n') || 'Sin datos GPS.';
+  const byD = {};
+  trips.forEach(r => {
+    if (!byD[r.driverId]) byD[r.driverId] = { name:r.driverName, c:0, b:0, n:0, co:0, f:{}, cobros:{efectivo:0,transferencia:0} };
+    const d = byD[r.driverId];
+    d.c++; d.b+=r.amount; d.n+=r.netAmount; d.co+=r.commAmount;
+    d.f[r.source] = (d.f[r.source]||0)+1;
+    if (r.cobro) d.cobros[r.cobro] = (d.cobros[r.cobro]||0)+1;
+  });
+  const incL = Object.values(byD).map(d =>
+    `- ${d.name}: ${d.c} carreras, ${Math.round(d.b).toLocaleString()} bruto, ${Math.round(d.n).toLocaleString()} neto, ${Math.round(d.co).toLocaleString()} comisiones. Canales: ${Object.entries(d.f).map(([s,c])=>SRC[s]+': '+c).join(', ')}. Cobro: efectivo ${d.cobros.efectivo||0}, transferencia ${d.cobros.transferencia||0}`
+  ).join('\n') || 'Sin ingresos.';
+  const cfg = getCfg(); const comm = cfg.commissions || {};
+  $('ai-out').style.display='none'; $('ai-load').style.display='block';
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, messages:[{role:'user',content:
+`Eres el sistema de análisis de FlotaControl, empresa de transporte eléctrico en La Habana, Cuba. Analiza el día ${date}.
+
+GPS (Traccar):\n${gpsL}\n\nIngresos por conductor:\n${incL}
+
+Totales: ${Math.round(bruto).toLocaleString()} bruto · ${Math.round(com).toLocaleString()} comisiones · ${Math.round(neto).toLocaleString()} neto · ${totalKm} km · ${cpm} CUP/km · ${trips.length} carreras
+
+Contexto: autos eléctricos, radio 170km desde La Habana. Comisiones: La Nave ${comm.nave||20}%, Cinco ${comm.cinco||10}%, WhatsApp ${comm.wapp||10}%, Directas 0%. Se registra si el cobro fue en efectivo o transferencia.
+
+Dame:
+1. Rendimiento general del día (2 líneas)
+2. Por conductor: eficiencia, anomalías, paradas largas detectadas
+3. Canal y forma de cobro que generó más valor neto
+4. 3 acciones concretas para mañana
+5. Alerta si algo está fuera de lo normal
+
+Directo y accionable. Máximo 380 palabras.`}]})
+    });
+    const data = await resp.json();
+    $('ai-out').textContent = data.content?.filter(c=>c.type==='text').map(c=>c.text).join('')||'Sin respuesta.';
+  } catch(e) { $('ai-out').textContent = 'Error al conectar con la IA.'; }
+  $('ai-out').style.display='block'; $('ai-load').style.display='none';
+}
+
+// ════════════════════════════════════════
+// ONLINE STATUS
+// ════════════════════════════════════════
+function updateOnlineUI() {
+  const online = navigator.onLine;
+  const adot = $('a-odot');
+  if (adot) adot.className = 'online-dot' + (online ? ' ok' : '');
+  const dstrip = $('drv-strip');
+  if (dstrip) {
+    dstrip.className = 'online-strip' + (online ? '' : ' offline');
+    dstrip.textContent = online ? '' : '📶 Sin conexión — guardando localmente, sincronizará al reconectar';
+  }
+}
+
+// ════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const fC = n => Math.round(n).toLocaleString('es') + ' CUP';
+const fK = n => (Math.round(n*10)/10) + ' km';
+const todayStr = () => new Date().toISOString().split('T')[0];
+const nowT = () => new Date().toTimeString().slice(0,5);
+
+function toast(m, d=2500) {
+  const t = $('toast');
+  t.textContent = m; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), d);
+}
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+async function init() {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+
+  // Open IndexedDB
+  try { idbDB = await openDB(); } catch(e) { console.error('DB error:', e); }
+
+  // Restore Traccar config
+  const cfg = getCfg();
+  if (cfg.traccar) {
+    try { $('tc-url').value = cfg.traccar.url || ''; } catch(e){}
+    try { $('tc-email').value = cfg.traccar.email || ''; } catch(e){}
+    try { $('tc-pass').value = cfg.traccar.pass || ''; } catch(e){}
+    if (cfg.traccar.email && cfg.traccar.pass) {
+      const today = todayStr();
+      ['a-date','gps-date','ai-date'].forEach(id => { try { $(id).value = today; } catch(e){} });
+      connTraccar(true).catch(()=>{});
+    }
+  }
+  ['a-date','gps-date','ai-date'].forEach(id => { try { if(!$(id).value) $(id).value = todayStr(); } catch(e){} });
+
+  // Firebase
+  await initFirebase();
+
+  // Online listeners
+  window.addEventListener('online',  () => { isOnline=true;  updateOnlineUI(); syncPending(); });
+  window.addEventListener('offline', () => { isOnline=false; updateOnlineUI(); });
+  updateOnlineUI();
+}
+
+init();
+</script>
+</body>
+</html>
