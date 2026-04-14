@@ -509,7 +509,7 @@ const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
 let currentUser = null;
-let selCan = null, selCobro = null;
+let selCan = null, selCobroType = null;
 let idbDB = null;
 let isOnline = navigator.onLine;
 let fbRef = null; // Firebase database reference
@@ -679,7 +679,7 @@ function doLogin() {
 
 function doLogout() {
   currentUser = null;
-  selCan = null; selCobro = null; currentAudioB64 = null;
+  selCan = null; selCobroType = null; currentAudioB64 = null;
   stopRecIfActive();
   $('li-user').value = '';
   $('li-pass').value = '';
@@ -726,7 +726,7 @@ function selCanal(src) {
 }
 
 function selCobro(type) {
-  selCobro = type;
+  selCobroType = type;
   $('co-efec').className = 'cobro-btn' + (type === 'efectivo' ? ' sel-efec' : '');
   $('co-trans').className = 'cobro-btn' + (type === 'transferencia' ? ' sel-trans' : '');
 }
@@ -756,7 +756,7 @@ async function regTrip() {
   if (!selCan) { toast('Selecciona el canal'); return; }
   const amt = parseFloat($('f-amt').value);
   if (!amt || amt <= 0) { toast('Ingresa el monto cobrado'); return; }
-  if (!selCobro) { toast('Selecciona la forma de cobro'); return; }
+  if (!selCobroType) { toast('Selecciona la forma de cobro'); return; }
 
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
@@ -765,7 +765,7 @@ async function regTrip() {
     date: t, time: nowT(),
     driverId: currentUser.id, driverName: currentUser.name,
     source: selCan, amount: amt, commRate: r, commAmount: com, netAmount: net,
-    cobro: selCobro,
+    cobro: selCobroType,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value.trim(),
     destination: $('f-dst').value.trim(),
@@ -787,7 +787,7 @@ async function regTrip() {
   // Flash confirmation
   const cf = $('conf-flash');
   $('cf-ttl').textContent = 'Carrera registrada ' + (synced ? '✓' : '(guardada offline)');
-  $('cf-det').textContent = `${SRC[selCan]} · ${fC(amt)} → Neto: ${fC(net)} · ${selCobro === 'efectivo' ? 'Efectivo' : 'Transferencia'}`;
+  $('cf-det').textContent = `${SRC[selCan]} · ${fC(amt)} → Neto: ${fC(net)} · ${selCobroType === 'efectivo' ? 'Efectivo' : 'Transferencia'}`;
   cf.classList.add('show');
   setTimeout(() => cf.classList.remove('show'), 3500);
 
