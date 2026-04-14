@@ -282,7 +282,13 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="av" id="drv-av">FC</div>
       <div><div class="uname" id="drv-name">Conductor</div><div class="udate" id="drv-date"></div></div>
     </div>
-    <button class="logout" onclick="doLogout()">Salir</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button id="shift-btn" onclick="toggleShift()" style="font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid;cursor:pointer;font-family:inherit;font-weight:500;transition:all .15s"></button>
+      <button class="logout" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+  <div id="shift-bar" style="display:none;background:#EAF3DE;padding:6px 16px;font-size:12px;color:#3B6D11;border-bottom:1px solid #97C459">
+    <span id="shift-info"></span>
   </div>
   <div class="online-strip" id="drv-strip">Sin conexión — guardando localmente</div>
 
@@ -301,7 +307,11 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="fcard">
       <div class="sec-lbl">Monto cobrado</div>
       <div class="amt-wrap">
-        <div class="amt-cur">CUP</div>
+        <select id="f-currency" onchange="updNet()" style="background:transparent;border:none;font-size:14px;font-weight:600;color:var(--txt2);cursor:pointer;outline:none;padding:0 4px 0 0;font-family:inherit">
+          <option value="CUP">CUP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
         <input class="amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
       </div>
       <div class="net-prev" id="net-prev"></div>
@@ -502,6 +512,13 @@ audio{width:100%;height:36px;margin-top:6px}
 // ════════════════════════════════════════
 const ADMIN_USER = 'admin';
 const DEFAULT_ADMIN_PASS = '9928';
+// ── CONDUCTORES HARDCODED (disponibles en cualquier dispositivo) ──
+const BUILTIN_DRIVERS = [
+  { id:'d001', name:'Cesar',  username:'cesar',  password:'8821' },
+  { id:'d002', name:'Ariel',  username:'ariel',  password:'2202' },
+  { id:'d003', name:'Amauri', username:'amauri', password:'0030' },
+  { id:'d004', name:'Prueba', username:'prueba', password:'0000' }
+];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
 const SRC = { nave:'La Nave', cinco:'Cinco', wapp:'WhatsApp', directo:'Directa' };
@@ -524,9 +541,19 @@ function getCfg() {
 }
 function setCfg(cfg) { localStorage.setItem('fc_cfg', JSON.stringify(cfg)); }
 function getDrivers() {
-  try { return JSON.parse(localStorage.getItem('fc_drivers') || '[]'); } catch(e) { return []; }
+  try {
+    const saved = JSON.parse(localStorage.getItem('fc_drivers') || '[]');
+    // Merge builtin + any extra drivers added via admin panel
+    const merged = [...BUILTIN_DRIVERS];
+    saved.forEach(s => { if (!merged.find(b => b.id === s.id)) merged.push(s); });
+    return merged;
+  } catch(e) { return BUILTIN_DRIVERS; }
 }
-function setDrivers(d) { localStorage.setItem('fc_drivers', JSON.stringify(d)); }
+function setDrivers(d) {
+  // Only save non-builtin drivers to localStorage
+  const extra = d.filter(x => !BUILTIN_DRIVERS.find(b => b.id === x.id));
+  localStorage.setItem('fc_drivers', JSON.stringify(extra));
+}
 
 // ════════════════════════════════════════
 // INDEXEDDB
@@ -703,6 +730,7 @@ function showDriverScreen() {
   updComLabels();
   loadDriverTrips();
   updateOnlineUI();
+  initShiftUI();
 }
 
 function showATab(name, el) {
@@ -739,9 +767,11 @@ function getCom(s) {
 
 function updNet() {
   const amt = parseFloat($('f-amt').value) || 0;
+  const cur = $('f-currency')?.value || 'CUP';
   if (!amt || !selCan) { $('net-prev').textContent = ''; return; }
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
-  $('net-prev').textContent = r > 0 ? `Neto: ${fC(net)}  (−${fC(com)} comisión)` : `Neto: ${fC(net)}  sin comisión`;
+  const fCur = n => Math.round(n).toLocaleString('es') + ' ' + cur;
+  $('net-prev').textContent = r > 0 ? `Neto: ${fCur(net)}  (−${fCur(com)} comisión)` : `Neto: ${fCur(net)}  sin comisión`;
 }
 
 function updComLabels() {
@@ -764,7 +794,7 @@ async function regTrip() {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     date: t, time: nowT(),
     driverId: currentUser.id, driverName: currentUser.name,
-    source: selCan, amount: amt, commRate: r, commAmount: com, netAmount: net,
+    source: selCan, amount: amt, currency: currency, commRate: r, commAmount: com, netAmount: net,
     cobro: selCobroType,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value.trim(),
@@ -949,7 +979,7 @@ function tripHTML(r, showDel) {
       ${audioHTML}
     </div>
     <div class="ti-right">
-      <div class="ti-neto">${fC(r.netAmount)}</div>
+      <div class="ti-neto">${Math.round(r.netAmount).toLocaleString('es')} ${r.currency||'CUP'}</div>
       <div class="ti-bruto">${fC(r.amount)} bruto</div>
       ${del}
     </div>
