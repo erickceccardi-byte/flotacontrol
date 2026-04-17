@@ -78,10 +78,6 @@ input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appear
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .drv-body{flex:1;overflow-y:auto;padding:14px}
 
-/* FORM CARD */
-.fcard{background:var(--bg);border-radius:var(--rl);padding:16px;margin-bottom:12px;border:0.5px solid var(--brd)}
-.sec-lbl{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
-
 /* Canal buttons */
 .canal-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .cbtn{background:var(--bg2);border:1.5px solid var(--brd);border-radius:var(--r);padding:12px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .12s;user-select:none}
@@ -260,6 +256,10 @@ audio{width:100%;height:36px;margin-top:6px}
 /* GPS */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 
+/* Channel summary row (driver) */
+.ch-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--brd);font-size:12px}
+.ch-row:last-child{border-bottom:none}
+
 @media(max-width:380px){
   .canal-grid{grid-template-columns:1fr 1fr}
   .cobro-row{grid-template-columns:1fr 1fr}
@@ -310,76 +310,72 @@ audio{width:100%;height:36px;margin-top:6px}
 
   <div class="drv-body">
 
-    <div class="fcard">
-      <div class="sec-lbl">Canal de la carrera</div>
-      <div class="canal-grid">
-        <div class="cbtn" id="cb-directo" onclick="selCanal('directo')"><div class="cdot directo"></div><div><div class="cname">Directa</div><div class="ccom">Sin comisión</div></div></div>
-        <div class="cbtn" id="cb-cinco" onclick="selCanal('cinco')"><div class="cdot cinco"></div><div><div class="cname">Cinco</div><div class="ccom" id="lbl-cinco">10%</div></div></div>
-        <div class="cbtn" id="cb-wapp" onclick="selCanal('wapp')"><div class="cdot wapp"></div><div><div class="cname">WhatsApp</div><div class="ccom" id="lbl-wapp">10%</div></div></div>
-        <div class="cbtn" id="cb-nave" onclick="selCanal('nave')"><div class="cdot nave"></div><div><div class="cname">La Nave</div><div class="ccom" id="lbl-nave">20%</div></div></div>
+    <div class="sh">Canal de la carrera</div>
+    <div class="canal-grid">
+      <div class="cbtn" id="cb-directo" onclick="selCanal('directo')"><div class="cdot directo"></div><div><div class="cname">Directa</div><div class="ccom">Sin comisión</div></div></div>
+      <div class="cbtn" id="cb-cinco" onclick="selCanal('cinco')"><div class="cdot cinco"></div><div><div class="cname">Cinco</div><div class="ccom" id="lbl-cinco">10%</div></div></div>
+      <div class="cbtn" id="cb-wapp" onclick="selCanal('wapp')"><div class="cdot wapp"></div><div><div class="cname">WhatsApp</div><div class="ccom" id="lbl-wapp">10%</div></div></div>
+      <div class="cbtn" id="cb-nave" onclick="selCanal('nave')"><div class="cdot nave"></div><div><div class="cname">La Nave</div><div class="ccom" id="lbl-nave">20%</div></div></div>
+    </div>
+
+    <div class="sh">Monto cobrado</div>
+    <div class="amt-wrap">
+      <select id="f-currency" onchange="updNet()" style="background:transparent;border:none;font-size:14px;font-weight:600;color:var(--txt2);cursor:pointer;outline:none;padding:0 4px 0 0;font-family:inherit">
+        <option value="CUP">CUP</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+      </select>
+      <input class="amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
+    </div>
+    <div class="net-prev" id="net-prev"></div>
+
+    <div class="sh">Forma de cobro</div>
+    <div class="cobro-row">
+      <div class="cobro-btn" id="co-efec" onclick="selCobro('efectivo')">
+        <span class="icon-lbl">💵</span>
+        <span class="txt-lbl">Efectivo</span>
+      </div>
+      <div class="cobro-btn" id="co-trans" onclick="selCobro('transferencia')">
+        <span class="icon-lbl">📲</span>
+        <span class="txt-lbl">Transferencia</span>
       </div>
     </div>
 
-    <div class="fcard">
-      <div class="sec-lbl">Monto cobrado</div>
-      <div class="amt-wrap">
-        <select id="f-currency" onchange="updNet()" style="background:transparent;border:none;font-size:14px;font-weight:600;color:var(--txt2);cursor:pointer;outline:none;padding:0 4px 0 0;font-family:inherit">
-          <option value="CUP">CUP</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-        </select>
-        <input class="amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
-      </div>
-      <div class="net-prev" id="net-prev"></div>
-    </div>
-
-    <div class="fcard">
-      <div class="sec-lbl">Forma de cobro</div>
-      <div class="cobro-row">
-        <div class="cobro-btn" id="co-efec" onclick="selCobro('efectivo')">
-          <span class="icon-lbl">💵</span>
-          <span class="txt-lbl">Efectivo</span>
-        </div>
-        <div class="cobro-btn" id="co-trans" onclick="selCobro('transferencia')">
-          <span class="icon-lbl">📲</span>
-          <span class="txt-lbl">Transferencia</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="fcard">
-      <div class="sec-lbl">Descripción del servicio</div>
+    <div class="sh">Descripción del servicio</div>
+    <div class="card">
       <textarea class="desc-area" id="f-desc" rows="2" placeholder="Descripción del servicio, cliente, observaciones..."></textarea>
-
-      <div style="margin-top:12px">
-        <div class="sec-lbl">Nota de voz (opcional)</div>
-        <div class="audio-row">
-          <button class="rec-btn idle" id="rec-btn" onclick="toggleRec()">🎤</button>
-          <div style="flex:1">
-            <div class="rec-status" id="rec-status">Toca para grabar una nota de voz</div>
-            <div class="rec-timer" id="rec-timer" style="display:none">00:00</div>
-          </div>
+      <div class="audio-row" style="margin-top:10px">
+        <button class="rec-btn idle" id="rec-btn" onclick="toggleRec()">🎤</button>
+        <div style="flex:1">
+          <div class="rec-status" id="rec-status">Toca para grabar una nota de voz</div>
+          <div class="rec-timer" id="rec-timer" style="display:none">00:00</div>
         </div>
-        <audio id="audio-preview" controls style="display:none;width:100%;margin-top:8px"></audio>
       </div>
+      <audio id="audio-preview" controls style="display:none;width:100%;margin-top:8px"></audio>
     </div>
 
-    <div class="fcard">
-      <div class="sec-lbl">Ruta (opcional)</div>
-      <div class="mini-row">
-        <div class="mini-f"><label>Origen</label><input type="text" id="f-org" placeholder="Vedado"></div>
-        <div class="mini-f"><label>Destino</label><input type="text" id="f-dst" placeholder="Aeropuerto"></div>
-      </div>
+    <div class="sh">Ruta (opcional)</div>
+    <div class="mini-row">
+      <div class="mini-f"><label>Origen</label><input type="text" id="f-org" placeholder="Vedado"></div>
+      <div class="mini-f"><label>Destino</label><input type="text" id="f-dst" placeholder="Aeropuerto"></div>
     </div>
 
-    <button class="reg-btn" onclick="regTrip()">Registrar carrera</button>
+    <button class="reg-btn" onclick="regTrip()" style="margin-top:14px">Registrar carrera</button>
 
     <div class="conf-flash" id="conf-flash" style="margin-top:12px">
       <div class="cf-ttl" id="cf-ttl">Carrera registrada</div>
       <div class="cf-det" id="cf-det"></div>
     </div>
 
-    <div class="sh" style="margin-top:20px">Mis carreras de hoy</div>
+    <div class="sh">Resumen de hoy</div>
+    <div class="sum-grid">
+      <div class="sumc"><div class="sumv g" id="drv-neto">—</div><div class="suml">Neto</div></div>
+      <div class="sumc"><div class="sumv" id="drv-bruto">—</div><div class="suml">Bruto</div></div>
+      <div class="sumc"><div class="sumv r" id="drv-com">—</div><div class="suml">Comisiones</div></div>
+      <div class="sumc"><div class="sumv" id="drv-carr">—</div><div class="suml">Carreras</div></div>
+    </div>
+
+    <div class="sh">Mis carreras de hoy</div>
     <div id="drv-trips"><div style="font-size:13px;color:var(--txt3);padding:6px 0">Sin carreras registradas todavía.</div></div>
     <div class="spacer"></div>
   </div>
@@ -864,6 +860,15 @@ async function loadDriverTrips() {
   const t = todayStr();
   const all = await dbGetTripsByDate(t);
   const mine = all.filter(r => r.driverId === currentUser.id).sort((a,b) => b.time.localeCompare(a.time));
+
+  const bruto = mine.reduce((s,r) => s + r.amount, 0);
+  const com   = mine.reduce((s,r) => s + r.commAmount, 0);
+  const neto  = mine.reduce((s,r) => s + r.netAmount, 0);
+  if ($('drv-neto'))  $('drv-neto').textContent  = neto  ? fC(neto)  : '—';
+  if ($('drv-bruto')) $('drv-bruto').textContent = bruto ? fC(bruto) : '—';
+  if ($('drv-com'))   $('drv-com').textContent   = com   ? '-' + fC(com) : '—';
+  if ($('drv-carr'))  $('drv-carr').textContent  = mine.length || '—';
+
   const el = $('drv-trips');
   if (!mine.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:4px 0">Sin carreras registradas todavía.</div>'; return; }
   el.innerHTML = mine.map(r => tripHTML(r, true)).join('');
