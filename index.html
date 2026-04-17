@@ -1158,13 +1158,27 @@ async function loadGPS() {
     const aH = { 'Authorization':'Basic '+btoa(cfg.traccar.email+':'+cfg.traccar.pass), 'Accept':'application/json' };
     let km=0,stops=0,vmax=0;
     try {
-      const [sum,stp] = await Promise.all([
-        fetch(cfg.traccar.url+'/api/reports/summary'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[]),
+      // Calcular km reales desde posiciones (filtra GPS drift - solo cuenta velocidad > 5km/h)
+      const [positions, stp] = await Promise.all([
+        fetch(cfg.traccar.url+'/api/positions'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[]),
         fetch(cfg.traccar.url+'/api/reports/stops'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[])
       ]);
-      if (sum.length) { km=Math.round(sum[0].distance/100)/10; vmax=Math.round((sum[0].maxSpeed||0)*1.852); }
+      // Haversine: distancia real entre dos puntos GPS
+      const hav = (a,b,c,e)=>{const R=6371,dL=(c-a)*Math.PI/180,dO=(e-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)**2;return R*2*Math.asin(Math.sqrt(x));};
+      let totalKm = 0, maxSpd = 0;
+      for (let j=1; j<positions.length; j++) {
+        const p1 = positions[j-1], p2 = positions[j];
+        const spdKmh = p2.speed * 1.852;
+        if (spdKmh > 5) {
+          const dist = hav(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+          if (dist < 2) totalKm += dist;
+        }
+        if (p2.speed > maxSpd) maxSpd = p2.speed;
+      }
+      km = Math.round(totalKm*10)/10;
+      vmax = Math.round(maxSpd*1.852);
       stops = stp.length;
-    } catch(e) {}
+    } catch(e) { console.error('GPS calc error:', e); }
     gpsCache[date][d.id] = { km, stops, vmax, name: dname, driverId: did };
     html += `<div class="drv-row"><div class="drv-head"><div class="drv-av" style="background:${bg};color:${col}">${dname.slice(0,2).toUpperCase()}</div><div class="drv-nm">${dname}</div></div>
     <div class="drv-stats">
