@@ -264,6 +264,19 @@ audio{width:100%;height:36px;margin-top:6px}
   .canal-grid{grid-template-columns:1fr 1fr}
   .cobro-row{grid-template-columns:1fr 1fr}
 }
+
+/* ═══ MODAL: ELEGIR VEHÍCULO ═══ */
+.vmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:flex-end;justify-content:center}
+.vmodal.show{display:flex;animation:fadein .2s ease-out}
+.vmodal-card{background:var(--bg2);width:100%;max-width:450px;border-radius:18px 18px 0 0;padding:24px 20px 18px;animation:slideup .25s ease-out;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+.vmodal-ttl{font-size:18px;font-weight:600;color:var(--txt);margin-bottom:6px;text-align:center}
+.vmodal-sub{font-size:12px;color:var(--txt3);margin-bottom:18px;text-align:center}
+.vmodal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vbtn{background:var(--bg);border:1.5px solid var(--brd);border-radius:12px;padding:20px 12px;text-align:center;cursor:pointer;transition:all .12s;user-select:none;font-weight:500;color:var(--txt);font-size:15px}
+.vbtn:active{transform:scale(.96);background:var(--gbg);border-color:var(--g);color:var(--g)}
+.vmodal-cancel{width:100%;padding:12px;margin-top:14px;background:transparent;border:1px solid var(--brd);border-radius:10px;color:var(--txt2);cursor:pointer;font-size:14px;font-family:inherit}
+@keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
 </style>
 </head>
 <body>
@@ -524,6 +537,16 @@ audio{width:100%;height:36px;margin-top:6px}
 
 <div id="toast"></div>
 
+<!-- ═══════════ MODAL: ELEGIR VEHÍCULO (al iniciar turno) ═══════════ -->
+<div id="modal-vehiculo" class="vmodal">
+  <div class="vmodal-card">
+    <div class="vmodal-ttl">¿Qué vehículo vas a usar hoy?</div>
+    <div class="vmodal-sub">Toca uno para iniciar el turno</div>
+    <div id="vehiculo-grid" class="vmodal-grid"></div>
+    <button class="vmodal-cancel" onclick="cancelVehicleModal()">Cancelar</button>
+  </div>
+</div>
+
 <!-- Firebase CDN (optional, loaded dynamically) -->
 <script>
 // ════════════════════════════════════════
@@ -539,6 +562,16 @@ const BUILTIN_DRIVERS = [
   { id:'d002', name:'Ariel',  username:'ariel',  password:'2202' },
   { id:'d003', name:'Amauri', username:'amauri', password:'0030' },
   { id:'d004', name:'Prueba', username:'prueba', password:'0000' }
+];
+// ── VEHÍCULOS DE LA FLOTA ──
+// Los choferes rotan, así que cada turno registra qué vehículo se usó.
+// Mantener sincronizado con flota-config.json (sección "vehiculos").
+const VEHICULOS = [
+  { id:'nat-1', name:'Nat 1' },
+  { id:'nat-2', name:'Nat 2' },
+  { id:'byd-w', name:'Byd W' },
+  { id:'byd-e', name:'Byd E' },
+  { id:'byd-p', name:'Byd P' }
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
@@ -834,6 +867,10 @@ async function regTrip() {
     origin: $('f-org').value.trim(),
     destination: $('f-dst').value.trim(),
     audioB64: currentAudioB64 || null,
+    // Vehículo del turno actual (si hay turno abierto). Las carreras
+    // registradas sin turno o en turnos legacy quedan con vehiculoId=null.
+    vehiculoId: currentShift ? (currentShift.vehiculoId || null) : null,
+    vehiculoName: currentShift ? (currentShift.vehiculoName || null) : null,
     synced: 0
   };
 
@@ -1016,6 +1053,7 @@ function tripHTML(r, showDel) {
         ${cobroTag}
         <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
         ${syncTag}
+        ${r.vehiculoName ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">🚗 ${r.vehiculoName}</span>` : ''}
       </div>
       ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination}</div>` : ''}
       ${r.desc ? `<div class="ti-desc">${r.desc}</div>` : ''}
@@ -1370,7 +1408,8 @@ function initShiftUI() {
     updateShiftBtn();
     if ($('shift-bar')) {
       $('shift-bar').style.display = 'block';
-      $('shift-info').textContent = 'Turno activo desde ' + currentShift.start;
+      const vehTxt = currentShift.vehiculoName ? ' · ' + currentShift.vehiculoName : '';
+      $('shift-info').textContent = 'Turno activo desde ' + currentShift.start + vehTxt;
     }
   } else {
     currentShift = null;
@@ -1401,16 +1440,41 @@ function toggleShift() {
     updateShiftBtn();
     toast('Turno terminado — ' + hrs + 'h ' + mins + 'min trabajados');
   } else {
-    const start = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
-    currentShift = { start, startTs: Date.now(), driverId: currentUser.id };
-    localStorage.setItem('fc_shift_' + currentUser.id, JSON.stringify(currentShift));
-    if ($('shift-bar')) {
-      $('shift-bar').style.display = 'block';
-      $('shift-info').textContent = 'Turno activo desde ' + start;
-    }
-    updateShiftBtn();
-    toast('Turno iniciado — ¡Buen trabajo!');
+    // Antes de iniciar el turno, pedimos qué vehículo va a usar hoy.
+    openVehicleModal();
   }
+}
+
+function openVehicleModal() {
+  const grid = $('vehiculo-grid');
+  if (!grid) return;
+  grid.innerHTML = VEHICULOS.map(v =>
+    `<div class="vbtn" onclick="startShiftWithVehicle('${v.id}','${v.name.replace(/'/g,"\\'")}')">${v.name}</div>`
+  ).join('');
+  $('modal-vehiculo').classList.add('show');
+}
+
+function cancelVehicleModal() {
+  $('modal-vehiculo').classList.remove('show');
+}
+
+function startShiftWithVehicle(vId, vName) {
+  $('modal-vehiculo').classList.remove('show');
+  const start = new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'});
+  currentShift = {
+    start,
+    startTs: Date.now(),
+    driverId: currentUser.id,
+    vehiculoId: vId,
+    vehiculoName: vName
+  };
+  localStorage.setItem('fc_shift_' + currentUser.id, JSON.stringify(currentShift));
+  if ($('shift-bar')) {
+    $('shift-bar').style.display = 'block';
+    $('shift-info').textContent = 'Turno activo desde ' + start + ' · ' + vName;
+  }
+  updateShiftBtn();
+  toast('Turno iniciado en ' + vName + ' — ¡Buen trabajo!');
 }
 // ══════════════════════
 
