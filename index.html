@@ -562,6 +562,7 @@ audio{width:100%;height:36px;margin-top:6px}
     </div>
     <div class="atabs">
       <div class="atab active" onclick="showATab('resumen',this)">Resumen</div>
+      <div class="atab" onclick="showATab('historial',this)">Historial</div>
       <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
       <div class="atab" onclick="showATab('gps',this)">GPS</div>
       <div class="atab" onclick="showATab('ia',this)">IA</div>
@@ -586,6 +587,33 @@ audio{width:100%;height:36px;margin-top:6px}
       <div id="a-drivers"></div>
       <div class="sh">Todas las carreras</div>
       <div id="a-trips"><div style="font-size:13px;color:var(--txt3)">Selecciona una fecha.</div></div>
+      <div class="spacer"></div>
+    </div>
+
+    <!-- HISTORIAL: tabla comparativa Hoy/Semana/Mes por chofer -->
+    <div class="otab-pane" id="atp-historial">
+      <div style="margin-bottom:10px">
+        <div style="font-size:13px;color:var(--txt2);margin-bottom:4px">Resumen por chofer</div>
+        <div style="font-size:11px;color:var(--txt3)">Día = jornada actual (04:00–04:00) · Semana = últimos 7 días · Mes = últimos 30 días</div>
+      </div>
+      <div class="hist-table-wrap" style="overflow-x:auto;background:var(--bg);border:1px solid var(--brd);border-radius:10px">
+        <table id="hist-table" style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--bg2);border-bottom:1px solid var(--brd)">
+              <th style="text-align:left;padding:10px 8px;font-weight:600;color:var(--txt2)">Chofer</th>
+              <th style="text-align:right;padding:10px 6px;font-weight:600;color:var(--txt2)">Hoy</th>
+              <th style="text-align:right;padding:10px 6px;font-weight:600;color:var(--txt2)">Semana</th>
+              <th style="text-align:right;padding:10px 8px;font-weight:600;color:var(--txt2)">Mes</th>
+            </tr>
+          </thead>
+          <tbody id="hist-tbody">
+            <tr><td colspan="4" style="padding:14px;text-align:center;color:var(--txt3)">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:8px;text-align:center">
+        Cada celda muestra: bruto · neto · # carreras
+      </div>
       <div class="spacer"></div>
     </div>
 
@@ -1027,8 +1055,125 @@ function showATab(name, el) {
   $('atp-' + name).classList.add('active');
   el.classList.add('active');
   if (name === 'resumen') loadResumen();
+  if (name === 'historial') loadHistorial();
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'config') loadConfigUI();
+}
+
+// ════════════════════════════════════════
+// HISTORIAL: tabla por chofer × período (día/semana/mes)
+// ════════════════════════════════════════
+async function loadHistorial() {
+  const tbody = $('hist-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--txt3)">Cargando carreras…</td></tr>';
+
+  // Calcular rangos de fechas (hora local Cuba; usamos local del dispositivo)
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const todayStr_ = today.toISOString().slice(0,10);
+  const dates7 = [], dates30 = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0,10);
+    dates30.push(ds);
+    if (i < 7) dates7.push(ds);
+  }
+  // Para "hoy" jornada operativa 04:00→04:00, leemos también hoy y mañana
+  // si ya pasaron las 4 AM.
+  const todayPlus1 = new Date(today); todayPlus1.setDate(todayPlus1.getDate() + 1);
+  const datesToday = [todayStr_, todayPlus1.toISOString().slice(0,10)];
+
+  // Traer trips de los últimos 30 días (cubre día y semana también)
+  let allTrips = [];
+  if (fbRef && isOnline) {
+    try {
+      // Pedimos en paralelo
+      const promises = dates30.map(d =>
+        fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({}))
+      );
+      const results = await Promise.all(promises);
+      results.forEach((day, idx) => {
+        Object.values(day).forEach(t => { if (t && typeof t === 'object') allTrips.push(t); });
+      });
+    } catch(e) {
+      console.error('historial firebase', e);
+    }
+  } else {
+    // Sin Firebase: usar IndexedDB local
+    for (const d of dates30) {
+      try {
+        const day = await dbGetTripsByDate(d);
+        allTrips = allTrips.concat(day);
+      } catch(e) {}
+    }
+  }
+
+  // Helpers para detectar si un trip cae en una ventana operativa 04:00-04:00
+  function inOperationalDay(trip, dayYmd) {
+    // dayYmd = "2026-04-25" → operativo de 04:00 día → 04:00 día+1
+    if (!trip || !trip.date || !trip.time) return false;
+    const [hh] = trip.time.split(':').map(Number);
+    if (trip.date === dayYmd && hh >= 4) return true;
+    // Día siguiente antes de las 4
+    const next = new Date(dayYmd); next.setDate(next.getDate() + 1);
+    const nextStr = next.toISOString().slice(0,10);
+    if (trip.date === nextStr && hh < 4) return true;
+    return false;
+  }
+
+  function inLast7Days(trip) {
+    return dates7.includes(trip.date);
+  }
+  function inLast30Days(trip) {
+    return dates30.includes(trip.date);
+  }
+
+  // Agrupar por chofer
+  const drivers = getDrivers().filter(d => d.id !== 'd004'); // omitir "Prueba"
+  const rows = drivers.map(drv => {
+    const myTrips = allTrips.filter(t => t.driverId === drv.id);
+    const today_ = myTrips.filter(t => inOperationalDay(t, todayStr_));
+    const week_  = myTrips.filter(inLast7Days);
+    const month_ = myTrips.filter(inLast30Days);
+    return {
+      driver: drv,
+      today_: aggBucket(today_),
+      week_:  aggBucket(week_),
+      month_: aggBucket(month_),
+    };
+  });
+
+  function aggBucket(trips) {
+    if (!trips.length) return { count: 0, bruto: 0, neto: 0 };
+    const bruto = trips.reduce((s,t) => s + (t.amount||0), 0);
+    const neto  = trips.reduce((s,t) => s + (t.netAmount||0), 0);
+    return { count: trips.length, bruto, neto };
+  }
+
+  function cellHTML(b) {
+    if (!b.count) return '<span style="color:var(--txt3)">—</span>';
+    return `<div style="font-weight:600;color:var(--txt)">${Math.round(b.bruto).toLocaleString('es')}</div>
+            <div style="font-size:10px;color:var(--g)">${Math.round(b.neto).toLocaleString('es')} neto</div>
+            <div style="font-size:10px;color:var(--txt3)">${b.count} carrera${b.count===1?'':'s'}</div>`;
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--txt3)">No hay choferes activos.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, idx) => `
+    <tr style="border-bottom:1px solid var(--brd)">
+      <td style="padding:10px 8px;vertical-align:top">
+        <div style="font-weight:600;color:var(--txt)">${r.driver.name}</div>
+        <div style="font-size:10px;color:var(--txt3)">@${r.driver.username}</div>
+      </td>
+      <td style="padding:10px 6px;text-align:right;vertical-align:top">${cellHTML(r.today_)}</td>
+      <td style="padding:10px 6px;text-align:right;vertical-align:top">${cellHTML(r.week_)}</td>
+      <td style="padding:10px 8px;text-align:right;vertical-align:top">${cellHTML(r.month_)}</td>
+    </tr>
+  `).join('');
 }
 
 // ════════════════════════════════════════
