@@ -578,13 +578,34 @@ audio{width:100%;height:36px;margin-top:6px}
         <input type="date" id="a-date">
         <button class="btn" onclick="loadResumen()">Ver</button>
       </div>
+
+      <div class="sh">Total del día (consolidado USD)</div>
       <div class="sum-grid">
-        <div class="sumc"><div class="sumv g" id="a-neto">—</div><div class="suml">Neto total</div></div>
-        <div class="sumc"><div class="sumv r" id="a-com">—</div><div class="suml">Comisiones</div></div>
-        <div class="sumc"><div class="sumv" id="a-bruto">—</div><div class="suml">Bruto total</div></div>
+        <div class="sumc"><div class="sumv g" id="a-neto">—</div><div class="suml">Neto USD</div></div>
+        <div class="sumc"><div class="sumv r" id="a-com">—</div><div class="suml">Comisión USD</div></div>
+        <div class="sumc"><div class="sumv" id="a-bruto">—</div><div class="suml">Bruto USD</div></div>
         <div class="sumc"><div class="sumv" id="a-carr">—</div><div class="suml">Carreras</div></div>
       </div>
+      <div id="a-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-4px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Desglose por moneda y forma de pago</div>
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
+        <table id="a-breakdown" style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--bg2)">
+              <th style="text-align:left;padding:8px 10px;font-weight:600;color:var(--txt2)">Moneda</th>
+              <th style="text-align:right;padding:8px 8px;font-weight:600;color:var(--txt2)">Efectivo</th>
+              <th style="text-align:right;padding:8px 8px;font-weight:600;color:var(--txt2)">Transfer.</th>
+              <th style="text-align:right;padding:8px 10px;font-weight:600;color:var(--txt2)">Total</th>
+            </tr>
+          </thead>
+          <tbody id="a-breakdown-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="sh" style="margin-top:14px">Por chofer</div>
       <div id="a-drivers"></div>
+
       <div class="sh">Todas las carreras</div>
       <div id="a-trips"><div style="font-size:13px;color:var(--txt3)">Selecciona una fecha.</div></div>
       <div class="spacer"></div>
@@ -796,11 +817,13 @@ const DEFAULT_ADMIN_PASS = '9928';
 // ── CONDUCTORES HARDCODED (disponibles en cualquier dispositivo) ──
 const BUILTIN_DRIVERS = [
   // Choferes activos hoy. Ver flota-config.json en la raíz del workspace
-  // para la fuente única de verdad. Para reactivar a Cesar (id d001) o
-  // añadir nuevos como Yoan, agregarlos aquí y al config.
+  // para la fuente única de verdad.
+  // Nota: el id interno del 'd003' se mantiene aunque el nombre cambió de
+  // Amauri a Amaury — así no rompemos las carreras históricas en Firebase
+  // que tienen driverId="d003".
   { id:'d002', name:'Ariel',  username:'ariel',  password:'2202' },
-  { id:'d003', name:'Amauri', username:'amauri', password:'0030' },
-  { id:'d004', name:'Prueba', username:'prueba', password:'0000' }
+  { id:'d003', name:'Amaury', username:'amaury', password:'0030' },
+  { id:'d005', name:'Yoan',   username:'yoan',   password:'4477' }
 ];
 // ── VEHÍCULOS DE LA FLOTA ──
 // Los choferes rotan, así que cada turno registra qué vehículo se usó.
@@ -1582,19 +1605,31 @@ function resetAudio() {
 // ════════════════════════════════════════
 // ADMIN: RESUMEN
 // ════════════════════════════════════════
+// Helper: dado un trip, devuelve el monto en USD del campo pedido,
+// priorizando el valor congelado (amount_usd) y cayendo a conversión
+// on-the-fly si no existe.
+function getTripUsd(trip, field) {
+  const usdField = field + '_usd';
+  if (typeof trip[usdField] === 'number') return trip[usdField];
+  if ((trip.currency || 'CUP').toUpperCase() === 'USD') return trip[field] || 0;
+  if (fxCache) {
+    const v = convertToUsd(trip[field] || 0, trip.currency || 'CUP');
+    if (v) return v.usd;
+  }
+  return 0;
+}
+
 async function loadResumen() {
   const date = $('a-date').value || todayStr();
   $('a-date').value = date;
 
   let trips = await dbGetTripsByDate(date);
 
-  // Also try Firebase
   if (fbRef && isOnline) {
     try {
       const snap = await fbRef.ref('trips/' + date).once('value');
       if (snap.val()) {
         const fbTrips = Object.values(snap.val());
-        // Merge with local (Firebase wins for synced trips)
         const localIds = new Set(trips.map(t => t.id));
         for (const ft of fbTrips) {
           if (!localIds.has(ft.id)) { await dbSaveTrip({ ...ft, synced: 1 }); trips.push(ft); }
@@ -1603,36 +1638,92 @@ async function loadResumen() {
     } catch(e) {}
   }
 
-  const bruto = trips.reduce((s,r)=>s+r.amount,0);
-  const com   = trips.reduce((s,r)=>s+r.commAmount,0);
-  const neto  = trips.reduce((s,r)=>s+r.netAmount,0);
-  $('a-neto').textContent  = neto  ? fC(neto)  : '—';
-  $('a-com').textContent   = com   ? '-'+fC(com): '—';
-  $('a-bruto').textContent = bruto ? fC(bruto)  : '—';
+  // ─── Total consolidado USD (cards superiores) ───
+  const brutoUsd = trips.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
+  const comUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
+  const netoUsd  = trips.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
+  $('a-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
+  $('a-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
+  $('a-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
   $('a-carr').textContent  = trips.length || '—';
 
-  // Per driver
+  // Nota de tasa de cambio usada
+  const fxNote = $('a-fx-note');
+  if (fxNote) {
+    if (!fxCache) {
+      fxNote.innerHTML = '<span style="color:var(--am)">⚠ No hay tasa fijada — los CUP/EUR no se convierten a USD. Ve a Config → Tipo de cambio.</span>';
+    } else {
+      const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
+      fxNote.textContent = `Tasa usada: 1 USD = ${cup} CUP · 1 EUR = ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD (${fxCache.fecha || 'hoy'})`;
+    }
+  }
+
+  // ─── Desglose por moneda × forma de pago ───
+  const breakdown = {};
+  trips.forEach(t => {
+    const cur = (t.currency || 'CUP').toUpperCase();
+    const cob = t.cobro || 'desconocido';
+    if (!breakdown[cur]) breakdown[cur] = { efectivo: 0, transferencia: 0, otro: 0 };
+    const bucket = (cob === 'efectivo' || cob === 'transferencia') ? cob : 'otro';
+    breakdown[cur][bucket] += (t.amount || 0);
+  });
+  const breakdownTbody = $('a-breakdown-tbody');
+  if (breakdownTbody) {
+    const ordered = ['CUP','USD','EUR'].filter(c => breakdown[c]);
+    Object.keys(breakdown).forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+    if (!ordered.length) {
+      breakdownTbody.innerHTML = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--txt3)">Sin carreras.</td></tr>';
+    } else {
+      breakdownTbody.innerHTML = ordered.map(cur => {
+        const b = breakdown[cur];
+        const total = (b.efectivo + b.transferencia + b.otro);
+        const fmt = n => n ? Math.round(n).toLocaleString('es') : '—';
+        return `<tr style="border-top:1px solid var(--brd)">
+          <td style="padding:8px 10px;font-weight:600;color:var(--txt)">${cur}</td>
+          <td style="padding:8px 8px;text-align:right">${fmt(b.efectivo)}</td>
+          <td style="padding:8px 8px;text-align:right">${fmt(b.transferencia)}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:600">${fmt(total)}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // ─── Por chofer (USD consolidado + desglose en su moneda original) ───
   const byD = {};
-  getDrivers().forEach((d,i) => { byD[d.id] = { name:d.name, idx:i, c:0, b:0, n:0, co:0 }; });
+  getDrivers().filter(d => d.id !== 'd004').forEach((d,i) => {
+    byD[d.id] = { name:d.name, idx:i, c:0, brutoUsd:0, netoUsd:0, comUsd:0, byCur:{} };
+  });
   trips.forEach(r => {
-    if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, b:0, n:0, co:0 };
-    byD[r.driverId].c++; byD[r.driverId].b+=r.amount; byD[r.driverId].n+=r.netAmount; byD[r.driverId].co+=r.commAmount;
+    if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, brutoUsd:0, netoUsd:0, comUsd:0, byCur:{} };
+    const drv = byD[r.driverId];
+    drv.c++;
+    drv.brutoUsd += getTripUsd(r, 'amount');
+    drv.netoUsd  += getTripUsd(r, 'netAmount');
+    drv.comUsd   += getTripUsd(r, 'commAmount');
+    const cur = (r.currency || 'CUP').toUpperCase();
+    if (!drv.byCur[cur]) drv.byCur[cur] = 0;
+    drv.byCur[cur] += (r.amount || 0);
   });
   const gDay = gpsCache[date] || {};
   $('a-drivers').innerHTML = Object.entries(byD).map(([id,d]) => {
     const [bg,col] = COLS[d.idx % COLS.length];
     const gps = Object.values(gDay).find(g => g.driverId === id) || null;
-    const cpm = gps && gps.km > 0 ? Math.round(d.n/gps.km) : 0;
+    const curBreakdown = Object.entries(d.byCur)
+      .map(([c,a]) => `${Math.round(a).toLocaleString('es')} ${c}`)
+      .join(' · ') || '—';
     return `<div class="drv-row"><div class="drv-head">
       <div class="drv-av" style="background:${bg};color:${col}">${d.name.slice(0,2).toUpperCase()}</div>
       <div class="drv-nm">${d.name}</div>
       <div style="margin-left:auto;font-size:11px;color:var(--txt3)">${d.c} carrera${d.c!==1?'s':''}</div>
     </div><div class="drv-stats">
-      <div class="ds"><div class="dsv" style="color:var(--g)">${Math.round(d.n).toLocaleString()}</div><div class="dsl">Neto</div></div>
-      <div class="ds"><div class="dsv" style="color:var(--re)">-${Math.round(d.co).toLocaleString()}</div><div class="dsl">Comis.</div></div>
+      <div class="ds"><div class="dsv" style="color:var(--g)">${d.netoUsd ? fmtUsd(d.netoUsd) : '—'}</div><div class="dsl">Neto USD</div></div>
+      <div class="ds"><div class="dsv" style="color:var(--re)">${d.comUsd ? '-' + fmtUsd(d.comUsd) : '—'}</div><div class="dsl">Comis. USD</div></div>
       <div class="ds"><div class="dsv">${gps ? fK(gps.km) : '—'}</div><div class="dsl">Km</div></div>
-      <div class="ds"><div class="dsv">${cpm||'—'}</div><div class="dsl">CUP/km</div></div>
-    </div></div>`;
+      <div class="ds"><div class="dsv" style="font-size:11px;font-weight:500">${gps && gps.km > 0 && d.netoUsd ? '$' + (d.netoUsd / gps.km).toFixed(2) : '—'}</div><div class="dsl">USD/km</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--txt3);padding:4px 12px 8px">Cobrado: ${curBreakdown}</div>
+    </div>`;
   }).join('') || '<div style="font-size:13px;color:var(--txt3)">Sin datos.</div>';
 
   const sorted = [...trips].sort((a,b) => b.time.localeCompare(a.time));
@@ -1668,7 +1759,7 @@ function tripHTML(r, showDel) {
     </div>
     <div class="ti-right">
       <div class="ti-neto">${Math.round(r.netAmount).toLocaleString('es')} ${r.currency||'CUP'}</div>
-      <div class="ti-bruto">${fC(r.amount)} bruto</div>
+      <div class="ti-bruto">${Math.round(r.amount).toLocaleString('es')} ${r.currency||'CUP'} bruto</div>
       ${(r.currency || 'CUP') !== 'USD' && r.netAmount_usd ? `<div style="font-size:10px;color:var(--g);margin-top:2px">≈ $${r.netAmount_usd.toFixed(2)}</div>` : ''}
       ${del}
     </div>
@@ -2194,7 +2285,7 @@ async function init() {
 
   // ══ AUTO-FIREBASE CONFIG ══
   const AUTO_FB = {"apiKey": "AIzaSyAot4WmR3n1PvmuSfsnjmC9VxbTdjmDzaE", "databaseURL": "https://flotacontrol-e9078-default-rtdb.firebaseio.com", "projectId": "flotacontrol-e9078"};
-  const AUTO_DRIVERS = [{"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amauri", "username": "amauri", "password": "0030"}, {"id": "d004", "name": "Prueba", "username": "prueba", "password": "0000"}];
+  const AUTO_DRIVERS = [{"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amaury", "username": "amaury", "password": "0030"}, {"id": "d005", "name": "Yoan", "username": "yoan", "password": "4477"}];
   
   // Pre-load firebase config
   const existingCfg = getCfg();
