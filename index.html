@@ -265,6 +265,11 @@ audio{width:100%;height:36px;margin-top:6px}
   .cobro-row{grid-template-columns:1fr 1fr}
 }
 
+/* Botones del selector de período en pestaña Detalle */
+.det-period-btn{background:transparent;border:none;color:var(--txt2);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;min-height:32px}
+.det-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.det-period-btn:active{transform:scale(.97)}
+
 /* ═══ MODAL: ELEGIR VEHÍCULO ═══ */
 .vmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:flex-end;justify-content:center}
 .vmodal.show{display:flex;animation:fadein .2s ease-out}
@@ -563,6 +568,7 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="atabs">
       <div class="atab active" onclick="showATab('resumen',this)">Resumen</div>
       <div class="atab" onclick="showATab('historial',this)">Historial</div>
+      <div class="atab" onclick="showATab('detalle',this)">Detalle</div>
       <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
       <div class="atab" onclick="showATab('gps',this)">GPS</div>
       <div class="atab" onclick="showATab('ia',this)">IA</div>
@@ -638,6 +644,54 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="spacer"></div>
     </div>
 
+    <!-- DETALLE: vista por chofer + período -->
+    <div class="otab-pane" id="atp-detalle">
+      <div class="card" style="padding:10px 12px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="det-driver" onchange="loadDetalle()" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--brd);border-radius:8px;background:var(--bg);font-size:13px;font-family:inherit;cursor:pointer"></select>
+          <div style="display:flex;gap:4px;background:var(--bg2);border-radius:8px;padding:3px">
+            <button class="det-period-btn active" data-period="day" onclick="setDetallePeriod('day')">Día</button>
+            <button class="det-period-btn" data-period="week" onclick="setDetallePeriod('week')">Semana</button>
+            <button class="det-period-btn" data-period="month" onclick="setDetallePeriod('month')">Mes</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="det-info" style="font-size:12px;color:var(--txt2);text-align:center;margin:10px 0"></div>
+
+      <div class="sh">Total consolidado USD</div>
+      <div class="sum-grid">
+        <div class="sumc"><div class="sumv g" id="det-neto">—</div><div class="suml">Neto USD</div></div>
+        <div class="sumc"><div class="sumv r" id="det-com">—</div><div class="suml">Comisión USD</div></div>
+        <div class="sumc"><div class="sumv" id="det-bruto">—</div><div class="suml">Bruto USD</div></div>
+        <div class="sumc"><div class="sumv" id="det-carr">—</div><div class="suml">Carreras</div></div>
+      </div>
+      <div id="det-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-4px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Desglose por moneda × forma de pago</div>
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--bg2)">
+              <th style="text-align:left;padding:8px 10px;font-weight:600;color:var(--txt2)">Moneda</th>
+              <th style="text-align:right;padding:8px 8px;font-weight:600;color:var(--txt2)">Efectivo</th>
+              <th style="text-align:right;padding:8px 8px;font-weight:600;color:var(--txt2)">Transfer.</th>
+              <th style="text-align:right;padding:8px 10px;font-weight:600;color:var(--txt2)">Total</th>
+            </tr>
+          </thead>
+          <tbody id="det-breakdown-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="sh">Por canal (USD)</div>
+      <div id="det-canales" class="card" style="padding:8px 10px"></div>
+
+      <div class="sh">Carreras del período</div>
+      <div id="det-trips"><div style="font-size:13px;color:var(--txt3);text-align:center;padding:14px">Selecciona chofer y período.</div></div>
+
+      <div class="spacer"></div>
+    </div>
+
     <!-- CHOFERES -->
     <div class="otab-pane" id="atp-choferes">
       <div class="sh">Conductores activos</div>
@@ -657,7 +711,7 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="otab-pane" id="atp-gps">
       <div class="sh">Conexión Traccar</div>
       <div class="card">
-        <div class="field"><label>URL servidor</label><input type="url" id="tc-url" placeholder="https://demo.traccar.org"></div>
+        <div class="field"><label>URL servidor</label><input type="url" id="tc-url" placeholder="https://server.traccar.org"></div>
         <div class="field"><label>Email</label><input type="email" id="tc-email"></div>
         <div class="field"><label>Contraseña</label><input type="password" id="tc-pass"></div>
         <button class="btn btnacc" onclick="connTraccar()">Conectar</button>
@@ -869,6 +923,33 @@ function setDrivers(d) {
   // Only save non-builtin drivers to localStorage
   const extra = d.filter(x => !BUILTIN_DRIVERS.find(b => b.id === x.id));
   localStorage.setItem('fc_drivers', JSON.stringify(extra));
+}
+
+// Limpia drivers custom de localStorage cuyo username ya esté en
+// BUILTIN_DRIVERS (evita duplicados visibles en la lista admin).
+// Ejemplo: el "yoan" minúscula que el usuario añadió hace tiempo desde la
+// UI, ahora que "Yoan" es builtin (d005), el viejo se elimina automático.
+function cleanupDuplicateDrivers() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('fc_drivers') || '[]');
+    const builtinUsers = new Set(BUILTIN_DRIVERS.map(d => (d.username||'').toLowerCase()));
+    const filtered = saved.filter(d => !builtinUsers.has((d.username||'').toLowerCase()));
+    if (filtered.length !== saved.length) {
+      localStorage.setItem('fc_drivers', JSON.stringify(filtered));
+    }
+  } catch(e) {}
+}
+
+// Migra silenciosamente la URL de Traccar guardada en config si tiene la
+// URL vieja de demo. Cuenta oficial server.traccar.org (subscripción).
+function migrateTraccarUrl() {
+  try {
+    const cfg = getCfg();
+    if (cfg.traccar && typeof cfg.traccar.url === 'string' && cfg.traccar.url.includes('demo.traccar.org')) {
+      cfg.traccar.url = 'https://server.traccar.org';
+      setCfg(cfg);
+    }
+  } catch(e) {}
 }
 
 // ════════════════════════════════════════
@@ -1226,6 +1307,7 @@ function showATab(name, el) {
   el.classList.add('active');
   if (name === 'resumen') loadResumen();
   if (name === 'historial') loadHistorial();
+  if (name === 'detalle') loadDetalle();
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
 }
@@ -1344,6 +1426,217 @@ async function loadHistorial() {
       <td style="padding:10px 8px;text-align:right;vertical-align:top">${cellHTML(r.month_)}</td>
     </tr>
   `).join('');
+}
+
+// ════════════════════════════════════════
+// DETALLE: vista por chofer + período
+// ════════════════════════════════════════
+let detPeriod = 'day';
+
+function setDetallePeriod(p) {
+  detPeriod = p;
+  document.querySelectorAll('.det-period-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.period === p);
+  });
+  loadDetalle();
+}
+
+function populateDetDriverSelect() {
+  const sel = $('det-driver');
+  if (!sel) return;
+  const drivers = getDrivers().filter(d => d.id !== 'd004'); // sin "Prueba" si quedara
+  // Mantiene la selección actual si existe
+  const prev = sel.value;
+  sel.innerHTML = drivers.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+  if (prev && drivers.find(d => d.id === prev)) sel.value = prev;
+}
+
+function getDetalleDateRange() {
+  // Devuelve { start: Date, end: Date, label, dates: [YYYY-MM-DD] } según detPeriod.
+  // Para 'day' usamos jornada operativa 04:00-04:00 hora local del dispositivo.
+  const now = new Date();
+  if (detPeriod === 'day') {
+    const today = new Date(now); today.setHours(0,0,0,0);
+    const todayStr_ = today.toISOString().slice(0,10);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+    const label = today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'});
+    return {
+      label,
+      dates: [todayStr_, tomorrow.toISOString().slice(0,10)],
+      filter: t => {
+        if (!t.date || !t.time) return false;
+        const [hh] = (t.time||'00:00').split(':').map(Number);
+        if (t.date === todayStr_ && hh >= 4) return true;
+        const nextStr = tomorrow.toISOString().slice(0,10);
+        if (t.date === nextStr && hh < 4) return true;
+        return false;
+      }
+    };
+  }
+  const days = detPeriod === 'week' ? 7 : 30;
+  const dates = [];
+  const today = new Date(now); today.setHours(0,0,0,0);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return {
+    label: detPeriod === 'week' ? 'Últimos 7 días' : 'Últimos 30 días',
+    dates,
+    filter: t => dates.includes(t.date),
+  };
+}
+
+async function loadDetalle() {
+  populateDetDriverSelect();
+  const sel = $('det-driver');
+  if (!sel || !sel.value) return;
+  const driverId = sel.value;
+  const drv = getDrivers().find(d => d.id === driverId);
+  if (!drv) return;
+
+  const range = getDetalleDateRange();
+
+  // Traer trips de las fechas relevantes (Firebase si hay red, IndexedDB si no)
+  let allTrips = [];
+  if (fbRef && isOnline) {
+    try {
+      const promises = range.dates.map(d =>
+        fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({}))
+      );
+      const results = await Promise.all(promises);
+      results.forEach(day => {
+        Object.values(day).forEach(t => { if (t && typeof t === 'object') allTrips.push(t); });
+      });
+    } catch(e) {}
+  } else {
+    for (const d of range.dates) {
+      try {
+        const day = await dbGetTripsByDate(d);
+        allTrips = allTrips.concat(day);
+      } catch(e) {}
+    }
+  }
+
+  // Filtrar por chofer y por la ventana del periodo
+  const trips = allTrips.filter(t => t.driverId === driverId && range.filter(t));
+
+  // Header con info
+  $('det-info').textContent = `${drv.name} · ${range.label} · ${trips.length} carrera${trips.length===1?'':'s'}`;
+
+  // Total consolidado USD (usando getTripUsd que prioriza congelado)
+  const brutoUsd = trips.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
+  const comUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
+  const netoUsd  = trips.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
+  $('det-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
+  $('det-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
+  $('det-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
+  $('det-carr').textContent  = trips.length || '—';
+
+  // Nota tasa
+  const fxNote = $('det-fx-note');
+  if (fxNote) {
+    if (!fxCache) {
+      fxNote.innerHTML = '<span style="color:var(--am)">⚠ No hay tasa fijada — montos CUP/EUR no se convierten.</span>';
+    } else {
+      const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
+      fxNote.textContent = `Tasa: 1 USD = ${cup} CUP · 1 EUR = ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD`;
+    }
+  }
+
+  // Desglose por moneda × forma de pago
+  const breakdown = {};
+  trips.forEach(t => {
+    const cur = (t.currency || 'CUP').toUpperCase();
+    const cob = t.cobro || 'desconocido';
+    if (!breakdown[cur]) breakdown[cur] = { efectivo: 0, transferencia: 0, otro: 0 };
+    const bucket = (cob === 'efectivo' || cob === 'transferencia') ? cob : 'otro';
+    breakdown[cur][bucket] += (t.amount || 0);
+  });
+  const breakdownTbody = $('det-breakdown-tbody');
+  if (breakdownTbody) {
+    const ordered = ['CUP','USD','EUR'].filter(c => breakdown[c]);
+    Object.keys(breakdown).forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+    if (!ordered.length) {
+      breakdownTbody.innerHTML = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--txt3)">Sin carreras.</td></tr>';
+    } else {
+      breakdownTbody.innerHTML = ordered.map(cur => {
+        const b = breakdown[cur];
+        const total = (b.efectivo + b.transferencia + b.otro);
+        const fmt = n => n ? Math.round(n).toLocaleString('es') : '—';
+        return `<tr style="border-top:1px solid var(--brd)">
+          <td style="padding:8px 10px;font-weight:600;color:var(--txt)">${cur}</td>
+          <td style="padding:8px 8px;text-align:right">${fmt(b.efectivo)}</td>
+          <td style="padding:8px 8px;text-align:right">${fmt(b.transferencia)}</td>
+          <td style="padding:8px 10px;text-align:right;font-weight:600">${fmt(total)}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // Por canal (USD)
+  const porCanal = {};
+  trips.forEach(t => {
+    const c = t.source || 'desconocido';
+    if (!porCanal[c]) porCanal[c] = { count: 0, brutoUsd: 0, netoUsd: 0 };
+    porCanal[c].count++;
+    porCanal[c].brutoUsd += getTripUsd(t, 'amount');
+    porCanal[c].netoUsd  += getTripUsd(t, 'netAmount');
+  });
+  const canalesEl = $('det-canales');
+  if (canalesEl) {
+    const orderedCanales = Object.entries(porCanal).sort((a,b) => b[1].brutoUsd - a[1].brutoUsd);
+    if (!orderedCanales.length) {
+      canalesEl.innerHTML = '<div style="font-size:12px;color:var(--txt3);text-align:center;padding:8px">Sin carreras.</div>';
+    } else {
+      canalesEl.innerHTML = orderedCanales.map(([c, info]) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--brd);font-size:13px">
+          <div>
+            <span style="font-weight:500">${SRC[c] || c}</span>
+            <span style="color:var(--txt3);font-size:11px;margin-left:6px">${info.count} carrera${info.count===1?'':'s'}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:600;color:var(--g)">${fmtUsd(info.netoUsd)}</div>
+            <div style="font-size:10px;color:var(--txt3)">${fmtUsd(info.brutoUsd)} bruto</div>
+          </div>
+        </div>
+      `).join('').replace('border-top:1px solid var(--brd)', 'border-top:none', 1); // primer borde fuera
+    }
+  }
+
+  // Carreras del período: agrupadas por fecha (la más reciente arriba)
+  const tripsEl = $('det-trips');
+  if (tripsEl) {
+    if (!trips.length) {
+      tripsEl.innerHTML = '<div style="font-size:13px;color:var(--txt3);text-align:center;padding:14px">Sin carreras en este período.</div>';
+    } else {
+      // Agrupar por fecha
+      const byDate = {};
+      trips.forEach(t => {
+        if (!byDate[t.date]) byDate[t.date] = [];
+        byDate[t.date].push(t);
+      });
+      const datesSorted = Object.keys(byDate).sort().reverse(); // recientes primero
+      tripsEl.innerHTML = datesSorted.map(d => {
+        const list = byDate[d].sort((a,b) => b.time.localeCompare(a.time));
+        const dayBruto = list.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
+        const dayNeto  = list.reduce((s,t) => s + getTripUsd(t, 'netAmount'), 0);
+        const dayLbl   = new Date(d + 'T12:00:00').toLocaleDateString('es', {weekday:'short', day:'numeric', month:'short'});
+        return `
+          <div style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg2);padding:6px 12px;border-radius:8px 8px 0 0;border:1px solid var(--brd);border-bottom:none">
+              <span style="font-size:12px;font-weight:600;color:var(--txt2)">${dayLbl}</span>
+              <span style="font-size:11px;color:var(--txt3)">${list.length} carr · ${fmtUsd(dayNeto)} neto · ${fmtUsd(dayBruto)} bruto</span>
+            </div>
+            <div style="border:1px solid var(--brd);border-top:none;border-radius:0 0 8px 8px;padding:4px 8px">
+              ${list.map(t => tripHTML(t, false)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
 }
 
 // ════════════════════════════════════════
@@ -2276,6 +2569,10 @@ async function init() {
   // Cargar tipo de cambio (cache local primero, luego refresca de Firebase si hay red)
   loadFxCacheLocal();
   loadLatestFxRates(); // dispara fetch en background
+
+  // Limpiezas silenciosas: drivers duplicados + URL Traccar vieja
+  cleanupDuplicateDrivers();
+  migrateTraccarUrl();
 
   // Restaurar sesión guardada (no pide login si ya estaba logueado).
   // Si no hay sesión, queda en la pantalla inicial (login).
