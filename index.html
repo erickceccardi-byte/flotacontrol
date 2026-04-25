@@ -270,6 +270,12 @@ audio{width:100%;height:36px;margin-top:6px}
 .det-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
 .det-period-btn:active{transform:scale(.97)}
 
+/* Total cobrado (opcional, para propina) */
+.d-tip-row{margin-top:6px}
+.d-tip-inp{width:100%;background:var(--bg);border:1px dashed var(--brd2);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--txt);outline:none;font-family:inherit;-webkit-appearance:none}
+.d-tip-inp::placeholder{color:var(--txt3);font-style:italic}
+.d-tip-inp:focus{border-style:solid;border-color:var(--g)}
+
 /* ═══ MODAL: ELEGIR VEHÍCULO ═══ */
 .vmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:flex-end;justify-content:center}
 .vmodal.show{display:flex;animation:fadein .2s ease-out}
@@ -481,9 +487,9 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
     </div>
 
-    <!-- MONTO + MONEDA -->
+    <!-- MONTO DE LA CARRERA + MONEDA (sobre este se calcula la comisión) -->
     <div class="d-section">
-      <div class="d-lbl">Monto cobrado</div>
+      <div class="d-lbl">Monto de la carrera</div>
       <div class="d-amt">
         <input class="d-amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
         <select id="f-currency" class="d-amt-cur" onchange="updNet()">
@@ -492,7 +498,13 @@ audio{width:100%;height:36px;margin-top:6px}
           <option value="EUR">EUR</option>
         </select>
       </div>
+      <!-- Total cobrado al cliente (opcional). Si > monto carrera, la
+           diferencia es propina que NO afecta comisión ni neto -->
+      <div class="d-tip-row">
+        <input class="d-tip-inp" type="number" id="f-total" placeholder="Total cobrado (opcional, si hubo propina)" inputmode="decimal" oninput="updNet()">
+      </div>
       <div class="net-prev" id="net-prev"></div>
+      <div id="tip-warn" style="font-size:11px;color:var(--re);font-weight:500;display:none;padding:3px 2px"></div>
     </div>
 
     <!-- PAGO — 2 botones grandes -->
@@ -668,6 +680,55 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="det-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-4px;margin-bottom:8px;text-align:center"></div>
 
+      <div class="sh">Propinas del período</div>
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center;background:var(--gbg);border-color:var(--gbrd);padding:10px 14px">
+        <span style="font-size:12px;color:var(--g);font-weight:500">Total propinas (no entran en bruto/neto)</span>
+        <span id="det-tip" style="font-size:16px;font-weight:600;color:var(--g)">—</span>
+      </div>
+
+      <div class="sh">Salario y pagos <span id="det-salary-pct-lbl" style="color:var(--txt3);font-weight:400;font-size:11px">(15% del neto)</span></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+          <span>Salario generado:</span>
+          <span style="text-align:right">
+            <span id="det-salario-usd" style="font-weight:600">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-salario-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
+          <span>Pagado en el período:</span>
+          <span style="text-align:right">
+            <span id="det-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-pagado-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0 4px;font-size:14px;border-top:2px solid var(--txt2);font-weight:600">
+          <span>Pendiente:</span>
+          <span style="text-align:right">
+            <span id="det-pendiente-usd" style="color:var(--g)">—</span>
+            <span style="font-size:11px;color:var(--txt3);font-weight:400" id="det-pendiente-cup"></span>
+          </span>
+        </div>
+
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
+          <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago al chofer</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="det-pago-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+            <select id="det-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="CUP">CUP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+            <button class="btn btnacc" onclick="registrarPago()" style="white-space:nowrap">Pagar</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos del período</div>
+          <div id="det-pagos-list" style="font-size:12px"></div>
+        </div>
+      </div>
+
       <div class="sh">Desglose por moneda × forma de pago</div>
       <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -756,6 +817,18 @@ audio{width:100%;height:36px;margin-top:6px}
         <button class="btn btnacc" onclick="saveCfg()">Guardar comisiones</button>
       </div>
 
+      <div class="sh">Salario del chofer</div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
+          Porcentaje del <strong>neto USD</strong> (después de comisiones del canal) que corresponde al chofer como salario. Default 15%.
+        </div>
+        <div class="field">
+          <label>% del neto que va al chofer</label>
+          <input type="number" id="cfg-salary-pct" value="15" min="0" max="100" step="0.5">
+        </div>
+        <button class="btn btnacc" onclick="saveSalaryPct()">Guardar % salario</button>
+      </div>
+
       <div class="sh">Tipo de cambio del día</div>
       <div class="card">
         <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
@@ -842,6 +915,11 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="bs-cell"><div class="bs-val" id="drv-bruto">—</div><div class="bs-lbl">Bruto</div></div>
       <div class="bs-cell"><div class="bs-val r" id="drv-com">—</div><div class="bs-lbl">Comisión</div></div>
       <div class="bs-cell"><div class="bs-val" id="drv-carr">—</div><div class="bs-lbl">Carreras</div></div>
+    </div>
+    <!-- Propinas del día (separado, no entra en neto/bruto/comisión) -->
+    <div style="margin:0 14px 12px;padding:10px 12px;background:var(--gbg);border:1px solid var(--gbrd);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--g);font-weight:500">Propinas del día</span>
+      <span class="bs-val g" id="drv-tip" style="font-size:14px">—</span>
     </div>
     <div class="bsheet-list" id="drv-trips">
       <div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>
@@ -1281,6 +1359,90 @@ function convertToUsd(amount, currency) {
 }
 
 // ════════════════════════════════════════
+// SALARIO Y PAGOS A CHOFERES
+// ════════════════════════════════════════
+function getSalaryPercent() {
+  const cfg = getCfg();
+  const pct = parseFloat(cfg.salary_pct);
+  return isNaN(pct) || pct < 0 ? 15 : pct;
+}
+
+async function saveSalaryPct() {
+  const v = parseFloat($('cfg-salary-pct').value);
+  if (isNaN(v) || v < 0 || v > 100) { toast('% inválido (0-100)'); return; }
+  const cfg = getCfg();
+  cfg.salary_pct = v;
+  setCfg(cfg);
+  toast(`% salario guardado (${v}%)`);
+  // Refrescar el label en Detalle si está visible
+  if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${v}% del neto)`;
+}
+
+async function registrarPago() {
+  const sel = $('det-driver');
+  if (!sel || !sel.value) { toast('Selecciona un chofer primero'); return; }
+  const driverId = sel.value;
+  const amt = parseFloat($('det-pago-amt').value);
+  if (!amt || amt <= 0) { toast('Monto del pago inválido'); return; }
+  const currency = $('det-pago-cur').value || 'CUP';
+
+  if (!fxCache) {
+    if (!confirm('No hay tasa de cambio fijada. El pago se guardará pero no se podrá convertir a USD para el cálculo de pendiente. ¿Continuar?')) return;
+  }
+  const usd = convertToUsd(amt, currency);
+
+  const pago = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    driverId,
+    amount: amt,
+    currency,
+    amount_usd: usd ? usd.usd : (currency === 'USD' ? amt : null),
+    fx_rate_used: usd ? usd.rate_used : null,
+    fx_rate_date: usd ? usd.rate_date : null,
+    date: todayStr(),
+    paid_at: new Date().toISOString(),
+    paid_by: currentUser ? currentUser.id : 'admin',
+  };
+
+  if (!fbRef || !isOnline) {
+    toast('Sin conexión — no se puede guardar el pago. Conéctate y reintenta.');
+    return;
+  }
+  try {
+    await fbRef.ref(`pagos/${driverId}/${pago.id}`).set(pago);
+    toast(`Pago registrado: ${Math.round(amt).toLocaleString('es')} ${currency}`);
+    $('det-pago-amt').value = '';
+    loadDetalle(); // refresca todo el detalle
+  } catch(e) {
+    toast('Error guardando pago: ' + e.message);
+  }
+}
+
+async function delPago(driverId, pagoId) {
+  if (!confirm('¿Eliminar este pago? La acción no se puede deshacer.')) return;
+  if (!fbRef || !isOnline) {
+    toast('Sin conexión');
+    return;
+  }
+  try {
+    await fbRef.ref(`pagos/${driverId}/${pagoId}`).remove();
+    toast('Pago eliminado');
+    loadDetalle();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+async function fetchPagosForDriver(driverId) {
+  if (!fbRef || !isOnline) return [];
+  try {
+    const snap = await fbRef.ref(`pagos/${driverId}`).once('value');
+    const val = snap.val() || {};
+    return Object.values(val);
+  } catch(e) { return []; }
+}
+
+// ════════════════════════════════════════
 // SCREENS
 // ════════════════════════════════════════
 function showScreen(name) {
@@ -1528,20 +1690,76 @@ async function loadDetalle() {
   const brutoUsd = trips.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
   const comUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
   const netoUsd  = trips.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  const tipUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'tipAmount'), 0);
   const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
   $('det-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
   $('det-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
   $('det-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
   $('det-carr').textContent  = trips.length || '—';
+  if ($('det-tip')) $('det-tip').textContent = tipUsd ? fmtUsd(tipUsd) : '—';
 
   // Nota tasa
   const fxNote = $('det-fx-note');
+  const cupRate = fxCache ? (fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : null)) : null;
   if (fxNote) {
     if (!fxCache) {
       fxNote.innerHTML = '<span style="color:var(--am)">⚠ No hay tasa fijada — montos CUP/EUR no se convierten.</span>';
     } else {
-      const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
-      fxNote.textContent = `Tasa: 1 USD = ${cup} CUP · 1 EUR = ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD`;
+      fxNote.textContent = `Tasa: 1 USD = ${cupRate} CUP · 1 EUR = ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD`;
+    }
+  }
+
+  // ─── Salario y pagos ───
+  const salaryPct = getSalaryPercent();
+  if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${salaryPct}% del neto)`;
+  const salarioUsd = netoUsd * (salaryPct / 100);
+  const salarioCup = (cupRate && salarioUsd) ? Math.round(salarioUsd * cupRate) : null;
+
+  // Traer pagos del chofer y filtrar por la ventana del periodo
+  const allPagos = await fetchPagosForDriver(driverId);
+  const pagosPeriodo = allPagos.filter(p => range.dates.includes(p.date));
+  const pagadoUsd = pagosPeriodo.reduce((s,p) => {
+    if (typeof p.amount_usd === 'number') return s + p.amount_usd;
+    if (fxCache) {
+      const c = convertToUsd(p.amount || 0, p.currency || 'CUP');
+      if (c) return s + c.usd;
+    }
+    return s;
+  }, 0);
+  const pagadoCup = (cupRate && pagadoUsd) ? Math.round(pagadoUsd * cupRate) : null;
+  const pendienteUsd = salarioUsd - pagadoUsd;
+  const pendienteCup = (cupRate) ? Math.round(pendienteUsd * cupRate) : null;
+
+  if ($('det-salario-usd')) $('det-salario-usd').textContent = salarioUsd ? fmtUsd(salarioUsd) : '—';
+  if ($('det-salario-cup')) $('det-salario-cup').textContent = salarioCup ? `  ·  ${salarioCup.toLocaleString('es')} CUP` : '';
+  if ($('det-pagado-usd'))  $('det-pagado-usd').textContent  = pagadoUsd ? '-' + fmtUsd(pagadoUsd) : '—';
+  if ($('det-pagado-cup'))  $('det-pagado-cup').textContent  = pagadoCup ? `  ·  -${pagadoCup.toLocaleString('es')} CUP` : '';
+  const pendColor = pendienteUsd >= 0 ? 'var(--g)' : 'var(--re)';
+  if ($('det-pendiente-usd')) {
+    $('det-pendiente-usd').textContent = pendienteUsd ? (pendienteUsd >= 0 ? fmtUsd(pendienteUsd) : '-' + fmtUsd(Math.abs(pendienteUsd))) : (salarioUsd ? '$0.00' : '—');
+    $('det-pendiente-usd').style.color = pendColor;
+  }
+  if ($('det-pendiente-cup')) {
+    $('det-pendiente-cup').textContent = (cupRate && (salarioUsd || pagadoUsd)) ? `  ·  ${pendienteCup >= 0 ? '' : '-'}${Math.abs(pendienteCup).toLocaleString('es')} CUP` : '';
+  }
+
+  // Lista de pagos del periodo
+  const pagosListEl = $('det-pagos-list');
+  if (pagosListEl) {
+    if (!pagosPeriodo.length) {
+      pagosListEl.innerHTML = '<div style="color:var(--txt3);padding:6px 0">Sin pagos registrados en este período.</div>';
+    } else {
+      const sorted = [...pagosPeriodo].sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
+      pagosListEl.innerHTML = sorted.map(p => {
+        const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
+        const hora = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
+        const usdEq = (typeof p.amount_usd === 'number' && p.currency !== 'USD') ? `  ≈ $${p.amount_usd.toFixed(2)}` : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd)">
+          <span style="color:var(--txt2)">${fecha} ${hora ? '· ' + hora : ''}</span>
+          <span style="font-weight:500">${Math.round(p.amount).toLocaleString('es')} ${p.currency}<span style="color:var(--txt3);font-weight:400;font-size:11px">${usdEq}</span></span>
+          <button onclick="delPago('${driverId}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:2px 6px">✕</button>
+        </div>`;
+      }).join('');
     }
   }
 
@@ -1630,7 +1848,7 @@ async function loadDetalle() {
               <span style="font-size:11px;color:var(--txt3)">${list.length} carr · ${fmtUsd(dayNeto)} neto · ${fmtUsd(dayBruto)} bruto</span>
             </div>
             <div style="border:1px solid var(--brd);border-top:none;border-radius:0 0 8px 8px;padding:4px 8px">
-              ${list.map(t => tripHTML(t, false)).join('')}
+              ${list.map(t => tripHTML(t, true)).join('')}
             </div>
           </div>
         `;
@@ -1663,7 +1881,21 @@ function getCom(s) {
 
 function updNet() {
   const amt = parseFloat($('f-amt').value) || 0;
+  const totalRaw = $('f-total') ? $('f-total').value : '';
+  const total = parseFloat(totalRaw) || 0;
   const cur = $('f-currency')?.value || 'CUP';
+
+  // Validación: si total cobrado < monto carrera → warning + bloquear
+  const warn = $('tip-warn');
+  if (totalRaw && total > 0 && total < amt) {
+    if (warn) {
+      warn.style.display = 'block';
+      warn.textContent = '⚠ Total cobrado menor al monto de la carrera. Corrige uno de los dos.';
+    }
+  } else {
+    if (warn) warn.style.display = 'none';
+  }
+
   if (!amt || !selCan) { $('net-prev').textContent = ''; return; }
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const fCur = n => Math.round(n).toLocaleString('es') + ' ' + cur;
@@ -1674,6 +1906,16 @@ function updNet() {
     if (usd) {
       txt += `  ≈ $${usd.usd.toFixed(2)} USD`;
     }
+  }
+  // Línea de propina (si total > monto carrera)
+  if (total > amt) {
+    const tip = total - amt;
+    let tipTxt = `\n+ Propina: ${fCur(tip)}`;
+    if (cur !== 'USD' && fxCache) {
+      const usdTip = convertToUsd(tip, cur);
+      if (usdTip) tipTxt += `  ≈ $${usdTip.usd.toFixed(2)} USD`;
+    }
+    txt += tipTxt;
   }
   $('net-prev').textContent = txt;
 }
@@ -1693,10 +1935,22 @@ async function regTrip() {
   }
   if (!selCan) { toast('Selecciona el canal'); return; }
   const amt = parseFloat($('f-amt').value);
-  if (!amt || amt <= 0) { toast('Ingresa el monto cobrado'); return; }
+  if (!amt || amt <= 0) { toast('Ingresa el monto de la carrera'); return; }
   if (!selCobroType) { toast('Selecciona la forma de cobro'); return; }
 
+  // Total cobrado (opcional). Si no se llena, asumimos = monto carrera (sin propina).
+  const totalRaw = $('f-total') ? $('f-total').value : '';
+  const total = parseFloat(totalRaw) || 0;
+  if (totalRaw && total > 0 && total < amt) {
+    toast('⚠ Total cobrado menor al monto de la carrera. Corrige uno de los dos.');
+    return;
+  }
+  // Propina = max(0, total - amt). Si total = 0 o = amt → propina = 0.
+  const tip = (total > amt) ? (total - amt) : 0;
+
   const currency = document.getElementById('f-currency')?.value || 'CUP';
+  // Comisión y neto se calculan SOBRE EL MONTO DE LA CARRERA, no sobre total.
+  // La propina NO entra en bruto/neto/comisión. Se guarda aparte.
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
   const pax = parseInt($('f-pax')?.value || '1', 10);
@@ -1706,12 +1960,17 @@ async function regTrip() {
   const amtUsd = convertToUsd(amt, currency);
   const comUsd = convertToUsd(com, currency);
   const netUsd = convertToUsd(net, currency);
+  const tipUsd = tip > 0 ? convertToUsd(tip, currency) : null;
 
   const trip = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     date: t, time: nowT(),
     driverId: currentUser.id, driverName: currentUser.name,
     source: selCan, amount: amt, currency: currency, commRate: r, commAmount: com, netAmount: net,
+    // Propina (separada de bruto/neto/comisión, solo va a casilla aparte)
+    tipAmount: tip,
+    tipAmount_usd: tipUsd ? tipUsd.usd : (tip === 0 ? 0 : null),
+    totalCollected: amt + tip, // = total real recibido del cliente
     // Equivalente USD congelado al momento del registro
     amount_usd: amtUsd ? amtUsd.usd : null,
     commAmount_usd: comUsd ? comUsd.usd : null,
@@ -1739,11 +1998,13 @@ async function regTrip() {
 
   // Reset form
   $('f-amt').value = '';
+  if ($('f-total')) $('f-total').value = '';
   $('f-desc').value = '';
   if ($('f-org')) $('f-org').value = '';
   if ($('f-dst')) $('f-dst').value = '';
   if ($('f-pax')) $('f-pax').value = '1';
   $('net-prev').textContent = '';
+  if ($('tip-warn')) $('tip-warn').style.display = 'none';
   // Quitar marca de "tiene contenido" del botón "+ Más"
   document.querySelectorAll('.d-extra-btn.has-content').forEach(b => b.classList.remove('has-content'));
   resetAudio();
@@ -1786,6 +2047,8 @@ async function loadDriverTrips() {
   const brutoUsd = mine.reduce((s,r) => s + getUsd(r, 'amount'), 0);
   const comUsd   = mine.reduce((s,r) => s + getUsd(r, 'commAmount'), 0);
   const netoUsd  = mine.reduce((s,r) => s + getUsd(r, 'netAmount'), 0);
+  // Propinas: campo nuevo. Las carreras viejas no lo tienen → 0.
+  const tipUsd   = mine.reduce((s,r) => s + getUsd(r, 'tipAmount'), 0);
 
   // Resumen del bottom sheet — TODO EN USD
   const fmtUsd = n => '$' + n.toFixed(n >= 100 ? 0 : 2);
@@ -1793,6 +2056,7 @@ async function loadDriverTrips() {
   if ($('drv-bruto')) $('drv-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
   if ($('drv-com'))   $('drv-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
   if ($('drv-carr'))  $('drv-carr').textContent  = mine.length || '—';
+  if ($('drv-tip'))   $('drv-tip').textContent   = tipUsd   ? fmtUsd(tipUsd)   : '—';
 
   // Footer compacto en pantalla principal — netoUsd como referencia rápida
   if ($('drv-foot-txt')) {
@@ -1810,7 +2074,8 @@ async function loadDriverTrips() {
     if (!mine.length) {
       el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>';
     } else {
-      el.innerHTML = mine.map(r => tripHTML(r, true)).join('');
+      // Chofer ya NO puede borrar sus carreras (decisión de control: solo admin).
+      el.innerHTML = mine.map(r => tripHTML(r, false)).join('');
     }
   }
 
@@ -1988,12 +2253,13 @@ async function loadResumen() {
     byD[d.id] = { name:d.name, idx:i, c:0, brutoUsd:0, netoUsd:0, comUsd:0, byCur:{} };
   });
   trips.forEach(r => {
-    if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, brutoUsd:0, netoUsd:0, comUsd:0, byCur:{} };
+    if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, brutoUsd:0, netoUsd:0, comUsd:0, tipUsd:0, byCur:{} };
     const drv = byD[r.driverId];
     drv.c++;
     drv.brutoUsd += getTripUsd(r, 'amount');
     drv.netoUsd  += getTripUsd(r, 'netAmount');
     drv.comUsd   += getTripUsd(r, 'commAmount');
+    drv.tipUsd   += getTripUsd(r, 'tipAmount');
     const cur = (r.currency || 'CUP').toUpperCase();
     if (!drv.byCur[cur]) drv.byCur[cur] = 0;
     drv.byCur[cur] += (r.amount || 0);
@@ -2005,6 +2271,9 @@ async function loadResumen() {
     const curBreakdown = Object.entries(d.byCur)
       .map(([c,a]) => `${Math.round(a).toLocaleString('es')} ${c}`)
       .join(' · ') || '—';
+    const tipLine = d.tipUsd > 0
+      ? `<span style="color:var(--g);font-weight:500"> · + ${fmtUsd(d.tipUsd)} propinas</span>`
+      : '';
     return `<div class="drv-row"><div class="drv-head">
       <div class="drv-av" style="background:${bg};color:${col}">${d.name.slice(0,2).toUpperCase()}</div>
       <div class="drv-nm">${d.name}</div>
@@ -2015,12 +2284,12 @@ async function loadResumen() {
       <div class="ds"><div class="dsv">${gps ? fK(gps.km) : '—'}</div><div class="dsl">Km</div></div>
       <div class="ds"><div class="dsv" style="font-size:11px;font-weight:500">${gps && gps.km > 0 && d.netoUsd ? '$' + (d.netoUsd / gps.km).toFixed(2) : '—'}</div><div class="dsl">USD/km</div></div>
     </div>
-    <div style="font-size:10px;color:var(--txt3);padding:4px 12px 8px">Cobrado: ${curBreakdown}</div>
+    <div style="font-size:10px;color:var(--txt3);padding:4px 12px 8px">Cobrado: ${curBreakdown}${tipLine}</div>
     </div>`;
   }).join('') || '<div style="font-size:13px;color:var(--txt3)">Sin datos.</div>';
 
   const sorted = [...trips].sort((a,b) => b.time.localeCompare(a.time));
-  $('a-trips').innerHTML = sorted.length ? sorted.map(r => tripHTML(r, false)).join('') : '<div style="font-size:13px;color:var(--txt3)">Sin carreras.</div>';
+  $('a-trips').innerHTML = sorted.length ? sorted.map(r => tripHTML(r, true)).join('') : '<div style="font-size:13px;color:var(--txt3)">Sin carreras.</div>';
 }
 
 // ════════════════════════════════════════
@@ -2060,10 +2329,30 @@ function tripHTML(r, showDel) {
 }
 
 async function delTrip(id, date) {
+  // Confirmación obligatoria: pedimos detalles del trip para que el admin
+  // sepa qué está borrando exactamente.
+  let details = '';
+  try {
+    const local = await dbGetTripsByDate(date);
+    const t = local.find(x => x.id === id);
+    if (t) {
+      details = `\n${t.driverName || '?'} · ${t.time || '?'} · ${SRC[t.source] || t.source} · ${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'}`;
+      if (t.origin || t.destination) details += `\n${t.origin || '?'} → ${t.destination || '?'}`;
+    }
+  } catch(e) {}
+  if (!confirm('¿Eliminar esta carrera?' + details + '\n\nEsta acción no se puede deshacer.')) return;
+
   await dbDeleteTrip(id);
   if (fbRef && isOnline) { try { await fbRef.ref(`trips/${date}/${id}`).remove(); } catch(e) {} }
+  // Refrescar la vista correcta según contexto
   if (currentUser.role === 'driver') loadDriverTrips();
-  else loadResumen();
+  else {
+    // Estamos en alguna vista admin — refrescar todas las que pueden estar visibles
+    if ($('atp-resumen') && $('atp-resumen').classList.contains('active')) loadResumen();
+    else if ($('atp-detalle') && $('atp-detalle').classList.contains('active')) loadDetalle();
+    else if ($('atp-historial') && $('atp-historial').classList.contains('active')) loadHistorial();
+    else loadResumen();
+  }
   toast('Carrera eliminada');
 }
 
@@ -2114,6 +2403,7 @@ function loadConfigUI() {
   $('cfg-nave').value  = cfg.commissions?.nave  || 20;
   $('cfg-cinco').value = cfg.commissions?.cinco || 10;
   $('cfg-wapp').value  = cfg.commissions?.wapp  || 10;
+  if ($('cfg-salary-pct')) $('cfg-salary-pct').value = getSalaryPercent();
   if (cfg.firebase) {
     $('fb-key').value  = cfg.firebase.apiKey    || '';
     $('fb-url').value  = cfg.firebase.databaseURL || '';
