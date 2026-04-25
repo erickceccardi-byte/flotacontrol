@@ -277,6 +277,128 @@ audio{width:100%;height:36px;margin-top:6px}
 .vmodal-cancel{width:100%;padding:12px;margin-top:14px;background:transparent;border:1px solid var(--brd);border-radius:10px;color:var(--txt2);cursor:pointer;font-size:14px;font-family:inherit}
 @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
+
+/* ═══════════════════════════════════════════════ */
+/* ═══ DRIVER REDISEÑADO — UNA SOLA PANTALLA  ═══ */
+/* ═══════════════════════════════════════════════ */
+#scr-driver{background:var(--bg2);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* Header compacto */
+.d-head{background:var(--dark);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;min-height:56px}
+.d-user{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.d-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;background:var(--gbg);color:var(--g);flex-shrink:0}
+.d-info{min-width:0;flex:1}
+.d-name{font-size:14px;font-weight:600;color:#fff;line-height:1.2}
+.d-meta{font-size:11px;color:rgba(255,255,255,.55);line-height:1.2;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.d-shift-btn{font-size:12px;padding:7px 12px;border-radius:18px;border:1px solid;cursor:pointer;font-family:inherit;font-weight:600;transition:all .15s;min-height:34px;white-space:nowrap}
+.d-logout{width:34px;height:34px;background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.7);font-size:14px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.d-logout:active{background:rgba(255,255,255,.18)}
+
+/* Body: flex column con secciones de altura controlada */
+.d-body{flex:1;display:flex;flex-direction:column;padding:10px 12px 6px;gap:8px;overflow:hidden}
+.d-section{flex-shrink:0}
+.d-lbl{font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+
+/* Canal: 2x2 botones grandes */
+.d-canal{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dcbtn{background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:10px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:all .12s;user-select:none;min-height:54px}
+.dcbtn.sel-nave{background:var(--rebg);border-color:var(--re)}
+.dcbtn.sel-cinco{background:var(--blbg);border-color:var(--bl)}
+.dcbtn.sel-wapp{background:var(--gbg);border-color:var(--g)}
+.dcbtn.sel-directo{background:var(--tlbg);border-color:var(--tl)}
+.dcbtn:active{transform:scale(.97)}
+.dcdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-bottom:2px}
+.dcdot.nave{background:var(--re)}.dcdot.cinco{background:var(--bl)}.dcdot.wapp{background:var(--g)}.dcdot.directo{background:var(--tl)}
+.dcname{font-size:13px;font-weight:600;color:var(--txt);line-height:1.1}
+.dccom{font-size:10px;color:var(--txt3);line-height:1}
+
+/* Monto: input grande */
+.d-amt{display:flex;align-items:center;gap:8px;background:var(--bg);border:1.5px solid var(--brd2);border-radius:10px;padding:10px 14px;min-height:54px}
+.d-amt-inp{flex:1;border:none;background:transparent;font-size:24px;font-weight:600;color:var(--txt);outline:none;-webkit-appearance:none}
+.d-amt-inp::placeholder{color:var(--brd2);font-weight:400}
+.d-amt-cur{background:transparent;border:none;font-size:14px;font-weight:600;color:var(--txt2);cursor:pointer;outline:none;font-family:inherit;min-width:60px;text-align:right}
+
+/* Pago: 2 botones grandes */
+.d-pago{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dpbtn{background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .12s;user-select:none;min-height:48px}
+.dpbtn.sel-efec{background:var(--gbg);border-color:var(--g)}
+.dpbtn.sel-trans{background:var(--pubg);border-color:var(--pu)}
+.dpbtn:active{transform:scale(.97)}
+.dpicon{font-size:18px;line-height:1}
+.dptxt{font-size:13px;font-weight:600;color:var(--txt)}
+
+/* Ruta: dropdowns compactos en línea */
+.d-ruta{display:flex;align-items:center;gap:5px;background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:6px 8px;min-height:46px}
+.d-zone{flex:1;min-width:0;background:transparent;border:none;font-size:13px;font-weight:500;color:var(--txt);outline:none;font-family:inherit;cursor:pointer;padding:6px 2px;-webkit-appearance:none;text-overflow:ellipsis}
+.d-arrow{color:var(--txt3);font-size:14px;flex-shrink:0}
+.d-pax{background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font-size:12px;font-weight:600;color:var(--txt);padding:5px 4px;cursor:pointer;font-family:inherit;flex-shrink:0;-webkit-appearance:none}
+
+/* Extras: voz + más detalles */
+.d-extras{display:flex;align-items:center;gap:6px;margin-top:6px}
+.d-extra-btn{flex:1;background:var(--bg);border:1px solid var(--brd);border-radius:8px;padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:500;color:var(--txt2);min-height:38px;font-family:inherit;transition:all .12s}
+.d-extra-btn:active{transform:scale(.97);background:var(--bg3)}
+.d-extra-btn.recording{background:var(--rebg);border-color:var(--re);color:var(--re);animation:recpulse 1s infinite}
+.d-extra-btn.has-content{background:var(--gbg);border-color:var(--gbrd);color:var(--g)}
+.d-extra-status{font-size:10px;color:var(--txt3)}
+
+/* Botón principal */
+.d-register{width:100%;padding:16px;background:var(--dark);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:4px;min-height:56px;transition:all .15s;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.d-register:active{transform:scale(.98);opacity:.9}
+.d-register.disabled{background:var(--brd2);box-shadow:none}
+
+/* Footer: tap para abrir bottom sheet */
+.d-foot{background:var(--dark);color:#fff;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;cursor:pointer;border-top:1px solid rgba(255,255,255,.08);min-height:48px;font-size:13px;font-weight:500}
+.d-foot:active{background:#000}
+.d-foot-arrow{color:rgba(255,255,255,.4);font-size:11px;flex-shrink:0}
+.d-foot-txt{flex:1;text-align:center;color:rgba(255,255,255,.85)}
+.d-foot-net{font-weight:700;color:#97C459}
+
+/* Confirmación flash compacta */
+#scr-driver .conf-flash{font-size:11px;padding:6px 10px}
+#scr-driver .conf-flash.show{display:block}
+#scr-driver .net-prev{font-size:11px;margin-top:2px}
+
+/* ═══ BOTTOM SHEET: HOY ═══ */
+.bsheet{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;align-items:flex-end;justify-content:center}
+.bsheet.show{display:flex;animation:fadein .2s}
+.bsheet-card{background:var(--bg2);width:100%;max-width:450px;max-height:85vh;border-radius:18px 18px 0 0;display:flex;flex-direction:column;animation:slideup .28s ease-out;box-shadow:0 -10px 40px rgba(0,0,0,.4)}
+.bsheet-grip{width:48px;height:5px;background:var(--brd2);border-radius:3px;margin:8px auto 4px;cursor:pointer}
+.bsheet-head{display:flex;align-items:center;justify-content:space-between;padding:10px 18px 8px}
+.bsheet-ttl{font-size:17px;font-weight:600;color:var(--txt)}
+.bsheet-x{background:transparent;border:none;font-size:18px;color:var(--txt2);cursor:pointer;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.bsheet-x:active{background:var(--bg3)}
+.bsheet-summary{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;padding:6px 14px 14px}
+.bs-cell{background:var(--bg);border:1px solid var(--brd);border-radius:10px;padding:10px 6px;text-align:center}
+.bs-val{font-size:15px;font-weight:700;color:var(--txt);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bs-val.g{color:var(--g)}
+.bs-val.r{color:var(--re)}
+.bs-lbl{font-size:10px;color:var(--txt3);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.bsheet-list{flex:1;overflow-y:auto;padding:0 14px 18px;-webkit-overflow-scrolling:touch}
+
+/* ═══ MINI-MODAL: DESCRIPCIÓN ═══ */
+.dmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center;padding:20px}
+.dmodal.show{display:flex;animation:fadein .2s}
+.dmodal-card{background:var(--bg2);width:100%;max-width:400px;border-radius:14px;padding:18px;animation:fadein .25s}
+.dmodal-ttl{font-size:15px;font-weight:600;color:var(--txt);margin-bottom:12px}
+.dmodal-area{width:100%;border:1px solid var(--brd2);border-radius:8px;padding:10px 12px;background:var(--bg);color:var(--txt);resize:none;font-size:14px;outline:none;line-height:1.4;font-family:inherit}
+.dmodal-actions{display:flex;gap:8px;margin-top:12px}
+.dmodal-btn{flex:1;padding:11px;border-radius:8px;border:1px solid;cursor:pointer;font-size:14px;font-weight:500;font-family:inherit}
+.dmodal-cancel{background:transparent;border-color:var(--brd);color:var(--txt2)}
+.dmodal-save{background:var(--dark);border-color:var(--dark);color:#fff;font-weight:600}
+.dmodal-btn:active{transform:scale(.97)}
+
+/* Pantallas chicas (≤360px) */
+@media(max-height:640px){
+  .d-body{padding:6px 10px 4px;gap:5px}
+  .d-section{margin:0}
+  .dcbtn{min-height:48px;padding:8px 6px}
+  .d-amt{padding:8px 12px;min-height:48px}
+  .d-amt-inp{font-size:22px}
+  .dpbtn{min-height:42px;padding:8px}
+  .d-ruta{min-height:42px;padding:5px 7px}
+  .d-register{padding:13px;min-height:48px;font-size:15px}
+}
 </style>
 </head>
 <body>
@@ -304,94 +426,129 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
-<!-- ═══════════ DRIVER ═══════════ -->
+<!-- ═══════════ DRIVER (rediseñado: una sola pantalla, sin scroll) ═══════════ -->
 <div class="scr" id="scr-driver">
-  <div class="top-bar">
-    <div class="user">
-      <div class="av" id="drv-av">FC</div>
-      <div><div class="uname" id="drv-name">Conductor</div><div class="udate" id="drv-date"></div></div>
+  <!-- Header compacto: chofer + vehículo + cerrar turno -->
+  <div class="d-head">
+    <div class="d-user">
+      <div class="d-av" id="drv-av">FC</div>
+      <div class="d-info">
+        <div class="d-name" id="drv-name">Conductor</div>
+        <div class="d-meta" id="drv-meta">—</div>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button id="shift-btn" onclick="toggleShift()" style="font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid;cursor:pointer;font-family:inherit;font-weight:500;transition:all .15s"></button>
-      <button class="logout" onclick="doLogout()">Salir</button>
+    <div class="d-actions">
+      <button id="shift-btn" class="d-shift-btn" onclick="toggleShift()"></button>
+      <button class="d-logout" onclick="doLogout()" title="Salir">⏻</button>
     </div>
   </div>
-  <div id="shift-bar" style="display:none;background:#EAF3DE;padding:6px 16px;font-size:12px;color:#3B6D11;border-bottom:1px solid #97C459">
-    <span id="shift-info"></span>
-  </div>
+
+  <!-- Online/offline strip -->
   <div class="online-strip" id="drv-strip">Sin conexión — guardando localmente</div>
 
-  <div class="drv-body">
+  <!-- Cuerpo: todo cabe en una pantalla, sin scroll -->
+  <div class="d-body">
 
-    <div class="sh">Canal de la carrera</div>
-    <div class="canal-grid">
-      <div class="cbtn" id="cb-directo" onclick="selCanal('directo')"><div class="cdot directo"></div><div><div class="cname">Directa</div><div class="ccom">Sin comisión</div></div></div>
-      <div class="cbtn" id="cb-cinco" onclick="selCanal('cinco')"><div class="cdot cinco"></div><div><div class="cname">Cinco</div><div class="ccom" id="lbl-cinco">10%</div></div></div>
-      <div class="cbtn" id="cb-wapp" onclick="selCanal('wapp')"><div class="cdot wapp"></div><div><div class="cname">WhatsApp</div><div class="ccom" id="lbl-wapp">10%</div></div></div>
-      <div class="cbtn" id="cb-nave" onclick="selCanal('nave')"><div class="cdot nave"></div><div><div class="cname">La Nave</div><div class="ccom" id="lbl-nave">20%</div></div></div>
-    </div>
-
-    <div class="sh">Monto cobrado</div>
-    <div class="amt-wrap">
-      <select id="f-currency" onchange="updNet()" style="background:transparent;border:none;font-size:14px;font-weight:600;color:var(--txt2);cursor:pointer;outline:none;padding:0 4px 0 0;font-family:inherit">
-        <option value="CUP">CUP</option>
-        <option value="USD">USD</option>
-        <option value="EUR">EUR</option>
-      </select>
-      <input class="amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
-    </div>
-    <div class="net-prev" id="net-prev"></div>
-
-    <div class="sh">Forma de cobro</div>
-    <div class="cobro-row">
-      <div class="cobro-btn" id="co-efec" onclick="selCobro('efectivo')">
-        <span class="icon-lbl">💵</span>
-        <span class="txt-lbl">Efectivo</span>
-      </div>
-      <div class="cobro-btn" id="co-trans" onclick="selCobro('transferencia')">
-        <span class="icon-lbl">📲</span>
-        <span class="txt-lbl">Transferencia</span>
-      </div>
-    </div>
-
-    <div class="sh">Descripción del servicio</div>
-    <div class="card">
-      <textarea class="desc-area" id="f-desc" rows="2" placeholder="Descripción del servicio, cliente, observaciones..."></textarea>
-      <div class="audio-row" style="margin-top:10px">
-        <button class="rec-btn idle" id="rec-btn" onclick="toggleRec()">🎤</button>
-        <div style="flex:1">
-          <div class="rec-status" id="rec-status">Toca para grabar una nota de voz</div>
-          <div class="rec-timer" id="rec-timer" style="display:none">00:00</div>
+    <!-- CANAL — 4 botones grandes en grid 2x2 -->
+    <div class="d-section">
+      <div class="d-lbl">Canal</div>
+      <div class="d-canal">
+        <div class="dcbtn" id="cb-directo" onclick="selCanal('directo')">
+          <div class="dcdot directo"></div>
+          <div class="dcname">Directa</div>
+          <div class="dccom">0%</div>
+        </div>
+        <div class="dcbtn" id="cb-cinco" onclick="selCanal('cinco')">
+          <div class="dcdot cinco"></div>
+          <div class="dcname">Cinco</div>
+          <div class="dccom" id="lbl-cinco">10%</div>
+        </div>
+        <div class="dcbtn" id="cb-wapp" onclick="selCanal('wapp')">
+          <div class="dcdot wapp"></div>
+          <div class="dcname">WhatsApp</div>
+          <div class="dccom" id="lbl-wapp">10%</div>
+        </div>
+        <div class="dcbtn" id="cb-nave" onclick="selCanal('nave')">
+          <div class="dcdot nave"></div>
+          <div class="dcname">La Nave</div>
+          <div class="dccom" id="lbl-nave">20%</div>
         </div>
       </div>
-      <audio id="audio-preview" controls style="display:none;width:100%;margin-top:8px"></audio>
     </div>
 
-    <div class="sh">Ruta (opcional)</div>
-    <div class="mini-row">
-      <div class="mini-f"><label>Origen</label><input type="text" id="f-org" placeholder="Vedado"></div>
-      <div class="mini-f"><label>Destino</label><input type="text" id="f-dst" placeholder="Aeropuerto"></div>
+    <!-- MONTO + MONEDA -->
+    <div class="d-section">
+      <div class="d-lbl">Monto cobrado</div>
+      <div class="d-amt">
+        <input class="d-amt-inp" type="number" id="f-amt" placeholder="0" inputmode="decimal" oninput="updNet()">
+        <select id="f-currency" class="d-amt-cur" onchange="updNet()">
+          <option value="CUP">CUP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+      </div>
+      <div class="net-prev" id="net-prev"></div>
     </div>
 
-    <button class="reg-btn" onclick="regTrip()" style="margin-top:14px">Registrar carrera</button>
+    <!-- PAGO — 2 botones grandes -->
+    <div class="d-section">
+      <div class="d-pago">
+        <div class="dpbtn" id="co-efec" onclick="selCobro('efectivo')">
+          <span class="dpicon">💵</span>
+          <span class="dptxt">Efectivo</span>
+        </div>
+        <div class="dpbtn" id="co-trans" onclick="selCobro('transferencia')">
+          <span class="dpicon">📲</span>
+          <span class="dptxt">Transfer</span>
+        </div>
+      </div>
+    </div>
 
-    <div class="conf-flash" id="conf-flash" style="margin-top:12px">
+    <!-- RUTA + PASAJEROS + EXTRAS -->
+    <div class="d-section">
+      <div class="d-ruta">
+        <select id="f-org" class="d-zone">
+          <option value="">Origen…</option>
+        </select>
+        <span class="d-arrow">→</span>
+        <select id="f-dst" class="d-zone">
+          <option value="">Destino…</option>
+        </select>
+        <select id="f-pax" class="d-pax" title="Pasajeros">
+          <option value="1">👥 1</option>
+          <option value="2">👥 2</option>
+          <option value="3">👥 3</option>
+          <option value="4">👥 4</option>
+        </select>
+      </div>
+      <div class="d-extras">
+        <button class="d-extra-btn" id="rec-btn" onclick="toggleRec()" title="Nota de voz"><span id="rec-icon">🎤</span><span class="d-extra-status" id="rec-status"></span></button>
+        <button class="d-extra-btn" onclick="openDescModal()" title="Más detalles">＋ Más<span class="d-extra-status" id="desc-status"></span></button>
+        <span class="rec-timer" id="rec-timer"></span>
+      </div>
+      <audio id="audio-preview" controls style="display:none;width:100%;margin-top:6px"></audio>
+    </div>
+
+    <!-- REGISTRAR — botón gigante -->
+    <button class="d-register" onclick="regTrip()">✓ REGISTRAR CARRERA</button>
+
+    <!-- Confirmación flash -->
+    <div class="conf-flash" id="conf-flash" style="margin-top:8px">
       <div class="cf-ttl" id="cf-ttl">Carrera registrada</div>
       <div class="cf-det" id="cf-det"></div>
     </div>
 
-    <div class="sh">Resumen de hoy</div>
-    <div class="sum-grid">
-      <div class="sumc"><div class="sumv g" id="drv-neto">—</div><div class="suml">Neto</div></div>
-      <div class="sumc"><div class="sumv" id="drv-bruto">—</div><div class="suml">Bruto</div></div>
-      <div class="sumc"><div class="sumv r" id="drv-com">—</div><div class="suml">Comisiones</div></div>
-      <div class="sumc"><div class="sumv" id="drv-carr">—</div><div class="suml">Carreras</div></div>
-    </div>
-
-    <div class="sh">Mis carreras de hoy</div>
-    <div id="drv-trips"><div style="font-size:13px;color:var(--txt3);padding:6px 0">Sin carreras registradas todavía.</div></div>
-    <div class="spacer"></div>
   </div>
+
+  <!-- Footer: tap para abrir bottom sheet con resumen + lista -->
+  <div class="d-foot" onclick="openHoySheet()">
+    <span class="d-foot-arrow">⬆</span>
+    <span class="d-foot-txt" id="drv-foot-txt">HOY: 0 carreras</span>
+    <span class="d-foot-net" id="drv-foot-net">—</span>
+  </div>
+
+  <!-- Hidden field para descripción (se llena desde modal "+Más") -->
+  <input type="hidden" id="f-desc" value="">
 </div>
 
 <!-- ═══════════ ADMIN ═══════════ -->
@@ -544,6 +701,38 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="vmodal-sub">Toca uno para iniciar el turno</div>
     <div id="vehiculo-grid" class="vmodal-grid"></div>
     <button class="vmodal-cancel" onclick="cancelVehicleModal()">Cancelar</button>
+  </div>
+</div>
+
+<!-- ═══════════ BOTTOM SHEET: HOY (resumen + lista de carreras) ═══════════ -->
+<div id="sheet-hoy" class="bsheet">
+  <div class="bsheet-card">
+    <div class="bsheet-grip" onclick="closeHoySheet()"></div>
+    <div class="bsheet-head">
+      <span class="bsheet-ttl">Hoy <span id="sheet-date" style="color:var(--txt3);font-weight:400"></span></span>
+      <button class="bsheet-x" onclick="closeHoySheet()">✕</button>
+    </div>
+    <div class="bsheet-summary">
+      <div class="bs-cell"><div class="bs-val g" id="drv-neto">—</div><div class="bs-lbl">Neto</div></div>
+      <div class="bs-cell"><div class="bs-val" id="drv-bruto">—</div><div class="bs-lbl">Bruto</div></div>
+      <div class="bs-cell"><div class="bs-val r" id="drv-com">—</div><div class="bs-lbl">Comisión</div></div>
+      <div class="bs-cell"><div class="bs-val" id="drv-carr">—</div><div class="bs-lbl">Carreras</div></div>
+    </div>
+    <div class="bsheet-list" id="drv-trips">
+      <div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MINI-MODAL: DESCRIPCIÓN (+ Más) ═══════════ -->
+<div id="modal-desc" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Detalles adicionales</div>
+    <textarea class="dmodal-area" id="f-desc-input" rows="4" placeholder="Cliente, observaciones, ruta especial, etc."></textarea>
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeDescModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveDescModal()">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -741,8 +930,8 @@ function doLogin() {
   selCobroType = null;
   currentAudioB64 = null;
   currentShift = null;
-  document.querySelectorAll('.cbtn').forEach(b => { b.className = 'cbtn'; });
-  document.querySelectorAll('.cobro-btn').forEach(b => { b.className = 'cobro-btn'; });
+  document.querySelectorAll('.dcbtn').forEach(b => { b.className = 'dcbtn'; });
+  document.querySelectorAll('.dpbtn').forEach(b => { b.className = 'dpbtn'; });
 
   if (user === ADMIN_USER || user === 'admin') {
     const cfg = getCfg();
@@ -788,7 +977,8 @@ function showDriverScreen() {
   showScreen('driver');
   $('drv-av').textContent = currentUser.name.slice(0,2).toUpperCase();
   $('drv-name').textContent = currentUser.name;
-  $('drv-date').textContent = new Date().toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+  // El campo drv-date del diseño viejo ya no existe; ahora todo va a drv-meta.
+  populateZoneDropdowns();
   updComLabels();
   loadDriverTrips();
   updateOnlineUI();
@@ -810,15 +1000,15 @@ function showATab(name, el) {
 // ════════════════════════════════════════
 function selCanal(src) {
   selCan = src;
-  document.querySelectorAll('.cbtn').forEach(b => b.className = 'cbtn');
-  $('cb-' + src).className = 'cbtn sel-' + src;
+  document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
+  $('cb-' + src).className = 'dcbtn sel-' + src;
   updNet();
 }
 
 function selCobro(type) {
   selCobroType = type;
-  $('co-efec').className = 'cobro-btn' + (type === 'efectivo' ? ' sel-efec' : '');
-  $('co-trans').className = 'cobro-btn' + (type === 'transferencia' ? ' sel-trans' : '');
+  $('co-efec').className = 'dpbtn' + (type === 'efectivo' ? ' sel-efec' : '');
+  $('co-trans').className = 'dpbtn' + (type === 'transferencia' ? ' sel-trans' : '');
 }
 
 function getCom(s) {
@@ -839,9 +1029,9 @@ function updNet() {
 function updComLabels() {
   const cfg = getCfg();
   const c = cfg.commissions || {};
-  $('lbl-nave').textContent  = (c.nave||20)  + '% comisión';
-  $('lbl-cinco').textContent = (c.cinco||10) + '% comisión';
-  $('lbl-wapp').textContent  = (c.wapp||10)  + '% comisión';
+  if ($('lbl-nave'))  $('lbl-nave').textContent  = (c.nave||20)  + '%';
+  if ($('lbl-cinco')) $('lbl-cinco').textContent = (c.cinco||10) + '%';
+  if ($('lbl-wapp'))  $('lbl-wapp').textContent  = (c.wapp||10)  + '%';
 }
 
 async function regTrip() {
@@ -857,6 +1047,7 @@ async function regTrip() {
   const currency = document.getElementById('f-currency')?.value || 'CUP';
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
+  const pax = parseInt($('f-pax')?.value || '1', 10);
   const trip = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     date: t, time: nowT(),
@@ -864,8 +1055,9 @@ async function regTrip() {
     source: selCan, amount: amt, currency: currency, commRate: r, commAmount: com, netAmount: net,
     cobro: selCobroType,
     desc: $('f-desc').value.trim(),
-    origin: $('f-org').value.trim(),
-    destination: $('f-dst').value.trim(),
+    origin: $('f-org').value || '',
+    destination: $('f-dst').value || '',
+    pasajeros: pax,
     audioB64: currentAudioB64 || null,
     // Vehículo del turno actual (si hay turno abierto). Las carreras
     // registradas sin turno o en turnos legacy quedan con vehiculoId=null.
@@ -881,16 +1073,28 @@ async function regTrip() {
   if (synced) await dbSaveTrip({ ...trip, synced: 1 });
 
   // Reset form
-  $('f-amt').value = ''; $('f-desc').value = ''; $('f-org').value = ''; $('f-dst').value = '';
+  $('f-amt').value = '';
+  $('f-desc').value = '';
+  if ($('f-org')) $('f-org').value = '';
+  if ($('f-dst')) $('f-dst').value = '';
+  if ($('f-pax')) $('f-pax').value = '1';
   $('net-prev').textContent = '';
+  // Quitar marca de "tiene contenido" del botón "+ Más"
+  document.querySelectorAll('.d-extra-btn.has-content').forEach(b => b.classList.remove('has-content'));
   resetAudio();
 
-  // Flash confirmation
+  // Flash confirmation (usa los valores antes del reset)
   const cf = $('conf-flash');
   $('cf-ttl').textContent = 'Carrera registrada ' + (synced ? '✓' : '(guardada offline)');
   $('cf-det').textContent = `${SRC[selCan]} · ${fC(amt)} → Neto: ${fC(net)} · ${selCobroType === 'efectivo' ? 'Efectivo' : 'Transferencia'}`;
   cf.classList.add('show');
   setTimeout(() => cf.classList.remove('show'), 3500);
+
+  // Reset selección de canal y forma de pago (limpia botones resaltados)
+  selCan = null;
+  selCobroType = null;
+  document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
+  document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
 
   loadDriverTrips();
 }
@@ -903,14 +1107,50 @@ async function loadDriverTrips() {
   const bruto = mine.reduce((s,r) => s + r.amount, 0);
   const com   = mine.reduce((s,r) => s + r.commAmount, 0);
   const neto  = mine.reduce((s,r) => s + r.netAmount, 0);
+  // Resumen del bottom sheet
   if ($('drv-neto'))  $('drv-neto').textContent  = neto  ? fC(neto)  : '—';
   if ($('drv-bruto')) $('drv-bruto').textContent = bruto ? fC(bruto) : '—';
   if ($('drv-com'))   $('drv-com').textContent   = com   ? '-' + fC(com) : '—';
   if ($('drv-carr'))  $('drv-carr').textContent  = mine.length || '—';
 
+  // Footer compacto en pantalla principal
+  if ($('drv-foot-txt')) {
+    $('drv-foot-txt').textContent = mine.length
+      ? `HOY: ${mine.length} carrera${mine.length===1?'':'s'}`
+      : 'HOY: 0 carreras';
+  }
+  if ($('drv-foot-net')) {
+    $('drv-foot-net').textContent = neto ? fC(neto) : '—';
+  }
+
+  // Lista detallada (en el bottom sheet)
   const el = $('drv-trips');
-  if (!mine.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:4px 0">Sin carreras registradas todavía.</div>'; return; }
-  el.innerHTML = mine.map(r => tripHTML(r, true)).join('');
+  if (el) {
+    if (!mine.length) {
+      el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>';
+    } else {
+      el.innerHTML = mine.map(r => tripHTML(r, true)).join('');
+    }
+  }
+
+  // Header meta (chofer + vehículo + contadores)
+  updateDriverMeta(mine.length, neto);
+}
+
+function updateDriverMeta(carrCount, netoTotal) {
+  const meta = $('drv-meta');
+  if (!meta) return;
+  const parts = [];
+  if (currentShift) {
+    if (currentShift.vehiculoName) parts.push('🚗 ' + currentShift.vehiculoName);
+    const dur = Math.round((Date.now() - currentShift.startTs) / 60000);
+    const hrs = Math.floor(dur/60), mins = dur%60;
+    parts.push((hrs > 0 ? hrs + 'h ' : '') + mins + 'm');
+  } else {
+    parts.push(new Date().toLocaleDateString('es', {weekday:'short', day:'numeric', month:'short'}));
+  }
+  if (carrCount) parts.push(carrCount + ' carrera' + (carrCount===1?'':'s'));
+  meta.textContent = parts.join(' · ');
 }
 
 // ════════════════════════════════════════
@@ -941,17 +1181,17 @@ async function startRec() {
       reader.onload = e => { currentAudioB64 = e.target.result; };
       reader.readAsDataURL(blob);
       stream.getTracks().forEach(t => t.stop());
-      $('rec-btn').className = 'rec-btn has-audio';
-      $('rec-btn').textContent = '🗑';
-      $('rec-status').textContent = 'Nota grabada — toca para borrar';
+      $('rec-btn').className = 'd-extra-btn has-content';
+      $('rec-icon').textContent = '🗑';
+      $('rec-status').textContent = 'grabada';
       $('rec-timer').style.display = 'none';
       clearInterval(recTimer);
     };
     mediaRec.start(200);
-    $('rec-btn').className = 'rec-btn recording';
-    $('rec-btn').textContent = '⏹';
-    $('rec-status').textContent = 'Grabando...';
-    $('rec-timer').style.display = 'block';
+    $('rec-btn').className = 'd-extra-btn recording';
+    $('rec-icon').textContent = '⏹';
+    $('rec-status').textContent = 'grabando…';
+    $('rec-timer').style.display = 'inline';
     recTimer = setInterval(() => {
       recSecs++;
       const m = String(Math.floor(recSecs/60)).padStart(2,'0');
@@ -967,10 +1207,11 @@ function stopRecIfActive() { if (mediaRec && mediaRec.state === 'recording') { m
 function resetAudio() {
   stopRecIfActive();
   currentAudioB64 = null; audioChunks = [];
-  $('audio-preview').src = ''; $('audio-preview').style.display = 'none';
-  $('rec-btn').className = 'rec-btn idle'; $('rec-btn').textContent = '🎤';
-  $('rec-status').textContent = 'Toca para grabar una nota de voz';
-  $('rec-timer').style.display = 'none'; $('rec-timer').textContent = '00:00';
+  if ($('audio-preview')) { $('audio-preview').src = ''; $('audio-preview').style.display = 'none'; }
+  if ($('rec-btn')) { $('rec-btn').className = 'd-extra-btn'; }
+  if ($('rec-icon')) $('rec-icon').textContent = '🎤';
+  if ($('rec-status')) $('rec-status').textContent = '';
+  if ($('rec-timer')) { $('rec-timer').style.display = 'none'; $('rec-timer').textContent = '00:00'; }
 }
 
 // ════════════════════════════════════════
@@ -1054,8 +1295,9 @@ function tripHTML(r, showDel) {
         <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
         ${syncTag}
         ${r.vehiculoName ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">🚗 ${r.vehiculoName}</span>` : ''}
+        ${r.pasajeros && r.pasajeros > 1 ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">👥 ${r.pasajeros}</span>` : ''}
       </div>
-      ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination}</div>` : ''}
+      ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination || '—'}</div>` : ''}
       ${r.desc ? `<div class="ti-desc">${r.desc}</div>` : ''}
       ${audioHTML}
     </div>
@@ -1397,6 +1639,72 @@ function saveGPSMap() {
 }
 // ──────────────────────
 
+// ════════════════════════════════════════
+// ZONAS PARA DROPDOWNS DE ORIGEN/DESTINO
+// ════════════════════════════════════════
+// Sincronizar con flota-config.json sección "zonas".
+const ZONAS = [
+  { id:'vedado',          name:'Vedado' },
+  { id:'centro-habana',   name:'Centro Habana' },
+  { id:'habana-vieja',    name:'Habana Vieja' },
+  { id:'miramar',         name:'Miramar' },
+  { id:'playa',           name:'Playa' },
+  { id:'plaza',           name:'Plaza' },
+  { id:'cerro',           name:'Cerro' },
+  { id:'diez-de-octubre', name:'10 de Octubre' },
+  { id:'habana-este',     name:'Habana del Este' },
+  { id:'marianao',        name:'Marianao' },
+  { id:'boyeros',         name:'Boyeros' },
+  { id:'aeropuerto',      name:'Aeropuerto' },
+  { id:'varadero',        name:'Varadero' },
+  { id:'otro',            name:'Otro' }
+];
+
+function populateZoneDropdowns() {
+  const opts = ZONAS.map(z => `<option value="${z.name}">${z.name}</option>`).join('');
+  if ($('f-org')) $('f-org').innerHTML = '<option value="">Origen…</option>' + opts;
+  if ($('f-dst')) $('f-dst').innerHTML = '<option value="">Destino…</option>' + opts;
+}
+
+// ════════════════════════════════════════
+// BOTTOM SHEET: HOY (resumen + lista carreras)
+// ════════════════════════════════════════
+function openHoySheet() {
+  loadDriverTrips(); // refrescar datos
+  const today = new Date().toLocaleDateString('es', {day:'numeric', month:'long'});
+  if ($('sheet-date')) $('sheet-date').textContent = '· ' + today;
+  $('sheet-hoy').classList.add('show');
+}
+function closeHoySheet() {
+  $('sheet-hoy').classList.remove('show');
+}
+
+// ════════════════════════════════════════
+// MINI-MODAL: DESCRIPCIÓN (+ Más)
+// ════════════════════════════════════════
+function openDescModal() {
+  // Cargar lo que ya esté guardado
+  $('f-desc-input').value = $('f-desc').value || '';
+  $('modal-desc').classList.add('show');
+  setTimeout(() => $('f-desc-input').focus(), 100);
+}
+function closeDescModal() {
+  $('modal-desc').classList.remove('show');
+}
+function saveDescModal() {
+  const v = $('f-desc-input').value.trim();
+  $('f-desc').value = v;
+  // Marcar el botón "+ Más" si tiene contenido
+  const btns = document.querySelectorAll('.d-extra-btn');
+  btns.forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes('openDescModal')) {
+      if (v) b.classList.add('has-content');
+      else b.classList.remove('has-content');
+    }
+  });
+  closeDescModal();
+}
+
 // ══ SHIFT MANAGEMENT ══
 let currentShift = null;
 
@@ -1406,26 +1714,28 @@ function initShiftUI() {
   if (saved) {
     currentShift = JSON.parse(saved);
     updateShiftBtn();
-    if ($('shift-bar')) {
-      $('shift-bar').style.display = 'block';
-      const vehTxt = currentShift.vehiculoName ? ' · ' + currentShift.vehiculoName : '';
-      $('shift-info').textContent = 'Turno activo desde ' + currentShift.start + vehTxt;
-    }
+    // El shift-bar del diseño viejo ya no existe; toda la info va al
+    // header (drv-meta) y al footer.
   } else {
     currentShift = null;
     updateShiftBtn();
   }
+  // Refrescar meta del header (vehículo + duración + carreras)
+  loadDriverTrips();
 }
 
 function updateShiftBtn() {
   const btn = $('shift-btn');
   if (!btn) return;
+  // Botón ahora tiene clase d-shift-btn (estilos en CSS); aquí solo cambiamos
+  // colores según el estado.
+  btn.className = 'd-shift-btn';
   if (currentShift) {
-    btn.textContent = 'Terminar turno';
-    btn.style.cssText = 'font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid #F09595;cursor:pointer;font-family:inherit;font-weight:500;background:#FCEBEB;color:#A32D2D;';
+    btn.textContent = 'Cerrar turno';
+    btn.style.cssText = 'font-size:12px;padding:7px 12px;border-radius:18px;border:1px solid #F09595;cursor:pointer;font-family:inherit;font-weight:600;background:#FCEBEB;color:#A32D2D;min-height:34px';
   } else {
     btn.textContent = 'Iniciar turno';
-    btn.style.cssText = 'font-size:11px;padding:5px 10px;border-radius:20px;border:1px solid #97C459;cursor:pointer;font-family:inherit;font-weight:500;background:#EAF3DE;color:#3B6D11;';
+    btn.style.cssText = 'font-size:12px;padding:7px 12px;border-radius:18px;border:1px solid #97C459;cursor:pointer;font-family:inherit;font-weight:600;background:#EAF3DE;color:#3B6D11;min-height:34px';
   }
 }
 
@@ -1436,8 +1746,8 @@ function toggleShift() {
     const hrs = Math.floor(dur/60), mins = dur%60;
     localStorage.removeItem('fc_shift_' + currentUser.id);
     currentShift = null;
-    if ($('shift-bar')) $('shift-bar').style.display = 'none';
     updateShiftBtn();
+    loadDriverTrips(); // refresca header sin vehículo
     toast('Turno terminado — ' + hrs + 'h ' + mins + 'min trabajados');
   } else {
     // Antes de iniciar el turno, pedimos qué vehículo va a usar hoy.
@@ -1469,11 +1779,8 @@ function startShiftWithVehicle(vId, vName) {
     vehiculoName: vName
   };
   localStorage.setItem('fc_shift_' + currentUser.id, JSON.stringify(currentShift));
-  if ($('shift-bar')) {
-    $('shift-bar').style.display = 'block';
-    $('shift-info').textContent = 'Turno activo desde ' + start + ' · ' + vName;
-  }
   updateShiftBtn();
+  loadDriverTrips(); // refresca header con vehículo
   toast('Turno iniciado en ' + vName + ' — ¡Buen trabajo!');
 }
 // ══════════════════════
