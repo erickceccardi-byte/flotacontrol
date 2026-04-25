@@ -681,6 +681,28 @@ audio{width:100%;height:36px;margin-top:6px}
         <button class="btn btnacc" onclick="saveCfg()">Guardar comisiones</button>
       </div>
 
+      <div class="sh">Tipo de cambio del día</div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
+          Moneda principal: <strong>USD</strong>. Las carreras en CUP/EUR se convierten al equivalente USD usando estas tasas y el valor queda <strong>congelado</strong> al momento del registro.
+        </div>
+        <div id="fx-status" style="font-size:11px;padding:7px 10px;border-radius:8px;margin-bottom:10px;background:var(--bg3)">Cargando…</div>
+        <div class="g2">
+          <div class="field">
+            <label>Cuántos CUP por 1 USD</label>
+            <input type="number" id="fx-cup" placeholder="350" step="0.01" min="0" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>Cuántos USD por 1 EUR</label>
+            <input type="number" id="fx-eur" placeholder="1.07" step="0.0001" min="0" inputmode="decimal">
+          </div>
+        </div>
+        <button class="btn btnacc" onclick="saveFxRates()">Guardar tasa de hoy</button>
+        <div style="font-size:10px;color:var(--txt3);margin-top:8px">
+          Si no fijas la tasa de hoy, el sistema usa automáticamente la última tasa disponible y muestra un aviso al chofer.
+        </div>
+      </div>
+
       <div class="sh">Mapeo GPS → Conductores</div>
       <div class="card" id="gps-map-card">
         <p style="font-size:12px;color:var(--txt2);margin:0 0 10px">Asigna cada dispositivo Traccar a un conductor. Conecta GPS primero.</p>
@@ -1030,6 +1052,131 @@ function tryRestoreSession() {
 }
 
 // ════════════════════════════════════════
+// TIPOS DE CAMBIO (FX)
+// ════════════════════════════════════════
+// Estructura en Firebase:
+//   /tipo_cambio/2026-04-25 = { CUP_a_USD, EUR_a_USD, set_at, set_by }
+// Cache local en localStorage (clave fc_fx_cache) para que la PWA sepa la
+// tasa incluso sin red al momento de registrar una carrera.
+const FX_CACHE_KEY = 'fc_fx_cache';
+let fxCache = null; // { fecha, CUP_a_USD, EUR_a_USD, set_at }
+
+function loadFxCacheLocal() {
+  try {
+    const s = localStorage.getItem(FX_CACHE_KEY);
+    if (s) fxCache = JSON.parse(s);
+  } catch(e) { fxCache = null; }
+}
+function saveFxCacheLocal(fx) {
+  try { localStorage.setItem(FX_CACHE_KEY, JSON.stringify(fx)); } catch(e) {}
+}
+
+// Trae la última tasa disponible de Firebase. Si no hay red, usa cache local.
+async function loadLatestFxRates() {
+  if (!fbRef || !isOnline) {
+    loadFxCacheLocal();
+    return fxCache;
+  }
+  try {
+    // Trae el día más reciente (Firebase ordena claves por orderByKey)
+    const snap = await fbRef.ref('tipo_cambio')
+      .orderByKey().limitToLast(1).once('value');
+    const val = snap.val();
+    if (val) {
+      const fecha = Object.keys(val)[0];
+      const data = val[fecha];
+      fxCache = { fecha, ...data };
+      saveFxCacheLocal(fxCache);
+    } else {
+      loadFxCacheLocal();
+    }
+  } catch(e) {
+    console.error('FX load error', e);
+    loadFxCacheLocal();
+  }
+  return fxCache;
+}
+
+async function saveFxRates() {
+  const cup = parseFloat($('fx-cup').value);
+  const eur = parseFloat($('fx-eur').value);
+  if (!cup || cup <= 0) { toast('CUP por USD inválido'); return; }
+  if (!eur || eur <= 0) { toast('EUR a USD inválido'); return; }
+
+  const today = todayStr();
+  const data = {
+    // Guardamos como X_a_USD para uso directo en multiplicación
+    // CUP_a_USD = 1 / (CUP por 1 USD), porque el input es "350 CUP por 1 USD"
+    // → 1 CUP = 1/350 USD ≈ 0.002857
+    CUP_a_USD: 1 / cup,
+    EUR_a_USD: eur,
+    USD_a_USD: 1.0,
+    cup_por_usd: cup,        // guardamos también el formato "humano" que ingresó admin
+    eur_a_usd: eur,
+    set_at: new Date().toISOString(),
+    set_by: currentUser ? currentUser.id : 'unknown',
+    fecha: today
+  };
+
+  if (!fbRef || !isOnline) {
+    toast('Sin conexión — guardado solo local');
+    fxCache = data;
+    saveFxCacheLocal(data);
+    refreshFxStatusUI();
+    return;
+  }
+  try {
+    await fbRef.ref('tipo_cambio/' + today).set(data);
+    fxCache = data;
+    saveFxCacheLocal(data);
+    toast('Tasa de hoy guardada ✓');
+    refreshFxStatusUI();
+  } catch(e) {
+    toast('Error guardando: ' + e.message);
+  }
+}
+
+function refreshFxStatusUI() {
+  const el = $('fx-status');
+  if (!el) return;
+  if (!fxCache) {
+    el.innerHTML = '<span style="color:var(--am)">⚠ No hay tasa fijada — fíjala antes que el primer chofer registre carrera del día.</span>';
+    el.style.background = 'var(--ambg)';
+    return;
+  }
+  const today = todayStr();
+  if (fxCache.fecha === today) {
+    const t = fxCache.set_at ? new Date(fxCache.set_at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit'}) : '';
+    const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
+    el.innerHTML = `<span style="color:var(--g)">✓ Tasa de hoy fijada (${t})</span> · ${cup} CUP/USD · ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD/EUR`;
+    el.style.background = 'var(--gbg)';
+  } else {
+    const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
+    el.innerHTML = `<span style="color:var(--am)">⚠ Usando tasa del ${fxCache.fecha} (no se fijó la de hoy)</span> · ${cup} CUP/USD`;
+    el.style.background = 'var(--ambg)';
+  }
+  // Pre-cargar inputs con últimos valores
+  if ($('fx-cup') && !$('fx-cup').value) $('fx-cup').value = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? (1/fxCache.CUP_a_USD).toFixed(2) : '');
+  if ($('fx-eur') && !$('fx-eur').value) $('fx-eur').value = fxCache.eur_a_usd || fxCache.EUR_a_USD || '';
+}
+
+// Convierte cualquier moneda a USD usando la tasa cacheada.
+// Devuelve { usd: número, rate_used: número, rate_date: string } o null si no hay tasa para esa moneda.
+function convertToUsd(amount, currency) {
+  if (!fxCache) return null;
+  const cur = (currency || 'CUP').toUpperCase();
+  if (cur === 'USD') return { usd: amount, rate_used: 1.0, rate_date: fxCache.fecha };
+  const key = cur + '_a_USD';
+  const rate = fxCache[key];
+  if (!rate || rate <= 0) return null;
+  return {
+    usd: Math.round(amount * rate * 100) / 100,
+    rate_used: rate,
+    rate_date: fxCache.fecha
+  };
+}
+
+// ════════════════════════════════════════
 // SCREENS
 // ════════════════════════════════════════
 function showScreen(name) {
@@ -1057,7 +1204,7 @@ function showATab(name, el) {
   if (name === 'resumen') loadResumen();
   if (name === 'historial') loadHistorial();
   if (name === 'choferes') renderDriverMgmt();
-  if (name === 'config') loadConfigUI();
+  if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
 }
 
 // ════════════════════════════════════════
@@ -1204,7 +1351,15 @@ function updNet() {
   if (!amt || !selCan) { $('net-prev').textContent = ''; return; }
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const fCur = n => Math.round(n).toLocaleString('es') + ' ' + cur;
-  $('net-prev').textContent = r > 0 ? `Neto: ${fCur(net)}  (−${fCur(com)} comisión)` : `Neto: ${fCur(net)}  sin comisión`;
+  let txt = r > 0 ? `Neto: ${fCur(net)}  (−${fCur(com)} comisión)` : `Neto: ${fCur(net)}  sin comisión`;
+  // Equivalente USD si la moneda no es USD y hay tasa cargada
+  if (cur !== 'USD' && fxCache) {
+    const usd = convertToUsd(net, cur);
+    if (usd) {
+      txt += `  ≈ $${usd.usd.toFixed(2)} USD`;
+    }
+  }
+  $('net-prev').textContent = txt;
 }
 
 function updComLabels() {
@@ -1229,11 +1384,24 @@ async function regTrip() {
   const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
   const pax = parseInt($('f-pax')?.value || '1', 10);
+
+  // Congelar equivalente USD usando tasa del momento. Si no hay tasa,
+  // queda null y la skill de reportes hará fallback al config.
+  const amtUsd = convertToUsd(amt, currency);
+  const comUsd = convertToUsd(com, currency);
+  const netUsd = convertToUsd(net, currency);
+
   const trip = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     date: t, time: nowT(),
     driverId: currentUser.id, driverName: currentUser.name,
     source: selCan, amount: amt, currency: currency, commRate: r, commAmount: com, netAmount: net,
+    // Equivalente USD congelado al momento del registro
+    amount_usd: amtUsd ? amtUsd.usd : null,
+    commAmount_usd: comUsd ? comUsd.usd : null,
+    netAmount_usd: netUsd ? netUsd.usd : null,
+    fx_rate_used: amtUsd ? amtUsd.rate_used : null,
+    fx_rate_date: amtUsd ? amtUsd.rate_date : null,
     cobro: selCobroType,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value || '',
@@ -1285,23 +1453,39 @@ async function loadDriverTrips() {
   const all = await dbGetTripsByDate(t);
   const mine = all.filter(r => r.driverId === currentUser.id).sort((a,b) => b.time.localeCompare(a.time));
 
-  const bruto = mine.reduce((s,r) => s + r.amount, 0);
-  const com   = mine.reduce((s,r) => s + r.commAmount, 0);
-  const neto  = mine.reduce((s,r) => s + r.netAmount, 0);
-  // Resumen del bottom sheet
-  if ($('drv-neto'))  $('drv-neto').textContent  = neto  ? fC(neto)  : '—';
-  if ($('drv-bruto')) $('drv-bruto').textContent = bruto ? fC(bruto) : '—';
-  if ($('drv-com'))   $('drv-com').textContent   = com   ? '-' + fC(com) : '—';
+  // Sumas: si la carrera tiene amount_usd (congelado), usar ese.
+  // Si no (carreras viejas), convertir on-the-fly con la tasa actual.
+  function getUsd(trip, field, fallbackOriginal) {
+    const usdField = field + '_usd';
+    if (typeof trip[usdField] === 'number') return trip[usdField];
+    // Fallback: convertir ahora
+    if (fxCache) {
+      const v = convertToUsd(trip[field] || 0, trip.currency || 'CUP');
+      if (v) return v.usd;
+    }
+    // Sin tasa y sin congelado: si la carrera está en USD, devuélvela tal cual
+    if ((trip.currency || 'CUP').toUpperCase() === 'USD') return trip[field] || 0;
+    return 0;
+  }
+  const brutoUsd = mine.reduce((s,r) => s + getUsd(r, 'amount'), 0);
+  const comUsd   = mine.reduce((s,r) => s + getUsd(r, 'commAmount'), 0);
+  const netoUsd  = mine.reduce((s,r) => s + getUsd(r, 'netAmount'), 0);
+
+  // Resumen del bottom sheet — TODO EN USD
+  const fmtUsd = n => '$' + n.toFixed(n >= 100 ? 0 : 2);
+  if ($('drv-neto'))  $('drv-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
+  if ($('drv-bruto')) $('drv-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
+  if ($('drv-com'))   $('drv-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
   if ($('drv-carr'))  $('drv-carr').textContent  = mine.length || '—';
 
-  // Footer compacto en pantalla principal
+  // Footer compacto en pantalla principal — netoUsd como referencia rápida
   if ($('drv-foot-txt')) {
     $('drv-foot-txt').textContent = mine.length
       ? `HOY: ${mine.length} carrera${mine.length===1?'':'s'}`
       : 'HOY: 0 carreras';
   }
   if ($('drv-foot-net')) {
-    $('drv-foot-net').textContent = neto ? fC(neto) : '—';
+    $('drv-foot-net').textContent = netoUsd ? fmtUsd(netoUsd) : '—';
   }
 
   // Lista detallada (en el bottom sheet)
@@ -1485,6 +1669,7 @@ function tripHTML(r, showDel) {
     <div class="ti-right">
       <div class="ti-neto">${Math.round(r.netAmount).toLocaleString('es')} ${r.currency||'CUP'}</div>
       <div class="ti-bruto">${fC(r.amount)} bruto</div>
+      ${(r.currency || 'CUP') !== 'USD' && r.netAmount_usd ? `<div style="font-size:10px;color:var(--g);margin-top:2px">≈ $${r.netAmount_usd.toFixed(2)}</div>` : ''}
       ${del}
     </div>
   </div>`;
@@ -1993,9 +2178,13 @@ async function init() {
   await initFirebase();
 
   // Online listeners
-  window.addEventListener('online',  () => { isOnline=true;  updateOnlineUI(); syncPending(); });
+  window.addEventListener('online',  () => { isOnline=true;  updateOnlineUI(); syncPending(); loadLatestFxRates(); });
   window.addEventListener('offline', () => { isOnline=false; updateOnlineUI(); });
   updateOnlineUI();
+
+  // Cargar tipo de cambio (cache local primero, luego refresca de Firebase si hay red)
+  loadFxCacheLocal();
+  loadLatestFxRates(); // dispara fetch en background
 
   // Restaurar sesión guardada (no pide login si ya estaba logueado).
   // Si no hay sesión, queda en la pantalla inicial (login).
