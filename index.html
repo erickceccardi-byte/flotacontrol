@@ -920,6 +920,24 @@ async function pushTrip(trip) {
 // ════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════
+// ── Persistencia de sesión ──
+// Guardamos currentUser en localStorage para que el chofer no tenga que
+// poner usuario/contraseña cada vez que abre la app. Solo se borra cuando
+// hace logout explícito desde el botón "salir".
+const SESSION_KEY = 'fc_session';
+function saveSession() {
+  if (currentUser) localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
+}
+function loadSession() {
+  try {
+    const s = localStorage.getItem(SESSION_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch(e) { return null; }
+}
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+
 function doLogin() {
   const user = $('li-user').value.trim().toLowerCase();
   const pass = $('li-pass').value;
@@ -938,6 +956,7 @@ function doLogin() {
     const adminPass = cfg.adminPass || DEFAULT_ADMIN_PASS;
     if (pass === adminPass) {
       currentUser = { role: 'admin', name: 'Administrador', id: 'admin' };
+      saveSession();
       showScreen('admin');
       return;
     }
@@ -947,6 +966,7 @@ function doLogin() {
   const driver = drivers.find(d => d.username.toLowerCase() === user && d.password === pass);
   if (driver) {
     currentUser = { role: 'driver', name: driver.name, id: driver.id, username: driver.username };
+    saveSession();
     showDriverScreen();
     return;
   }
@@ -956,6 +976,10 @@ function doLogin() {
 }
 
 function doLogout() {
+  // Confirmación porque ahora la sesión persiste — un toque accidental al
+  // botón "salir" haría que tenga que volver a poner password.
+  if (!confirm('¿Cerrar sesión? Tendrás que volver a poner usuario y contraseña.')) return;
+  clearSession();
   currentUser = null;
   selCan = null; selCobroType = null; currentAudioB64 = null;
   stopRecIfActive();
@@ -963,6 +987,18 @@ function doLogout() {
   $('li-pass').value = '';
   $('li-err').textContent = '';
   showScreen('login');
+}
+
+function tryRestoreSession() {
+  const saved = loadSession();
+  if (!saved) return false;
+  currentUser = saved;
+  if (saved.role === 'admin') {
+    showScreen('admin');
+  } else {
+    showDriverScreen();
+  }
+  return true;
 }
 
 // ════════════════════════════════════════
@@ -1815,12 +1851,16 @@ async function init() {
   window.addEventListener('online',  () => { isOnline=true;  updateOnlineUI(); syncPending(); });
   window.addEventListener('offline', () => { isOnline=false; updateOnlineUI(); });
   updateOnlineUI();
+
+  // Restaurar sesión guardada (no pide login si ya estaba logueado).
+  // Si no hay sesión, queda en la pantalla inicial (login).
+  tryRestoreSession();
 }
 
 
   // ══ AUTO-FIREBASE CONFIG ══
   const AUTO_FB = {"apiKey": "AIzaSyAot4WmR3n1PvmuSfsnjmC9VxbTdjmDzaE", "databaseURL": "https://flotacontrol-e9078-default-rtdb.firebaseio.com", "projectId": "flotacontrol-e9078"};
-  const AUTO_DRIVERS = [{"id": "d001", "name": "Cesar", "username": "cesar", "password": "8821"}, {"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amauri", "username": "amauri", "password": "0030"}, {"id": "d004", "name": "Prueba", "username": "prueba", "password": "0000"}];
+  const AUTO_DRIVERS = [{"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amauri", "username": "amauri", "password": "0030"}, {"id": "d004", "name": "Prueba", "username": "prueba", "password": "0000"}];
   
   // Pre-load firebase config
   const existingCfg = getCfg();
