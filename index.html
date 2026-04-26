@@ -265,10 +265,10 @@ audio{width:100%;height:36px;margin-top:6px}
   .cobro-row{grid-template-columns:1fr 1fr}
 }
 
-/* Botones del selector de período en pestaña Detalle */
-.det-period-btn{background:transparent;border:none;color:var(--txt2);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;min-height:32px}
-.det-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
-.det-period-btn:active{transform:scale(.97)}
+/* Botones del selector de período en pestaña Detalle / Caja */
+.det-period-btn,.caja-period-btn{background:transparent;border:none;color:var(--txt2);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;min-height:32px;flex:1}
+.det-period-btn.active,.caja-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.det-period-btn:active,.caja-period-btn:active{transform:scale(.97)}
 
 /* Total cobrado (opcional, para propina) */
 .d-tip-row{margin-top:6px}
@@ -581,6 +581,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="atab active" onclick="showATab('resumen',this)">Resumen</div>
       <div class="atab" onclick="showATab('historial',this)">Historial</div>
       <div class="atab" onclick="showATab('detalle',this)">Detalle</div>
+      <div class="atab" onclick="showATab('caja',this)">Caja</div>
       <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
       <div class="atab" onclick="showATab('gps',this)">GPS</div>
       <div class="atab" onclick="showATab('ia',this)">IA</div>
@@ -706,12 +707,16 @@ audio{width:100%;height:36px;margin-top:6px}
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
           <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de salario</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="number" id="det-pago-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="number" id="det-pago-amt" placeholder="0" inputmode="decimal" style="flex:1 1 90px;min-width:80px;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
             <select id="det-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
               <option value="CUP">CUP</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
+            </select>
+            <select id="det-pago-cobro" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="efectivo">💵 Efec.</option>
+              <option value="transferencia">📲 Transf.</option>
             </select>
             <button class="btn btnacc" onclick="registrarPago('salario')" style="white-space:nowrap">Pagar</button>
           </div>
@@ -749,12 +754,16 @@ audio{width:100%;height:36px;margin-top:6px}
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
           <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de propinas</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="number" id="det-tip-pago-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="number" id="det-tip-pago-amt" placeholder="0" inputmode="decimal" style="flex:1 1 90px;min-width:80px;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
             <select id="det-tip-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
               <option value="CUP">CUP</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
+            </select>
+            <select id="det-tip-pago-cobro" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="efectivo">💵 Efec.</option>
+              <option value="transferencia">📲 Transf.</option>
             </select>
             <button class="btn btnacc" onclick="registrarPago('propina')" style="white-space:nowrap">Pagar</button>
           </div>
@@ -786,6 +795,88 @@ audio{width:100%;height:36px;margin-top:6px}
 
       <div class="sh">Carreras del período</div>
       <div id="det-trips"><div style="font-size:13px;color:var(--txt3);text-align:center;padding:14px">Selecciona chofer y período.</div></div>
+
+      <div class="spacer"></div>
+    </div>
+
+    <!-- CAJA EMPRESA: matriz de saldos por moneda × forma + movimientos + gráficos -->
+    <div class="otab-pane" id="atp-caja">
+      <div class="card" style="padding:10px 12px;margin-bottom:10px">
+        <div style="display:flex;gap:4px;background:var(--bg2);border-radius:8px;padding:3px;justify-content:center">
+          <button class="caja-period-btn active" data-period="day"   onclick="setCajaPeriod('day')">Día</button>
+          <button class="caja-period-btn" data-period="week"  onclick="setCajaPeriod('week')">Semana</button>
+          <button class="caja-period-btn" data-period="month" onclick="setCajaPeriod('month')">Mes</button>
+          <button class="caja-period-btn" data-period="all"   onclick="setCajaPeriod('all')">Todo</button>
+        </div>
+      </div>
+
+      <div class="sh">Saldos por moneda y forma</div>
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--bg2)">
+              <th style="text-align:left;padding:9px 10px;font-weight:600;color:var(--txt2)">Moneda</th>
+              <th style="text-align:right;padding:9px 8px;font-weight:600;color:var(--txt2)">💵 Efectivo</th>
+              <th style="text-align:right;padding:9px 8px;font-weight:600;color:var(--txt2)">📲 Transfer.</th>
+              <th style="text-align:right;padding:9px 10px;font-weight:600;color:var(--txt2)">Total</th>
+            </tr>
+          </thead>
+          <tbody id="caja-saldo-tbody"></tbody>
+        </table>
+      </div>
+      <div id="caja-saldo-total-usd" style="text-align:center;font-size:13px;color:var(--txt2);margin-top:10px;font-weight:500"></div>
+      <div id="caja-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-2px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Saldo inicial de caja</div>
+      <div class="card" id="caja-saldo-inicial-card">
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
+          Pone aquí cuánto tienes <strong>físicamente hoy</strong> en cada celda. Es el punto de partida del cálculo. Editable en cualquier momento.
+        </div>
+        <table style="width:100%;border-collapse:separate;border-spacing:6px;font-size:12px">
+          <thead><tr><th></th><th>Efectivo</th><th>Transferencia</th></tr></thead>
+          <tbody id="caja-inicial-tbody"></tbody>
+        </table>
+        <button class="btn btnacc" onclick="saveCajaInicial()" style="margin-top:8px">Guardar saldo inicial</button>
+      </div>
+
+      <div class="sh">Registrar movimiento manual</div>
+      <div class="card">
+        <div class="g2" style="margin-bottom:8px">
+          <div class="field">
+            <label>Tipo</label>
+            <select id="mov-tipo">
+              <option value="gasto">Gasto</option>
+              <option value="ingreso_extra">Ingreso extra</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Categoría</label>
+            <select id="mov-categoria"></select>
+          </div>
+        </div>
+        <div class="g2" style="margin-bottom:8px">
+          <div class="field"><label>Monto</label><input type="number" id="mov-amt" placeholder="0" inputmode="decimal"></div>
+          <div class="field"><label>Moneda</label><select id="mov-cur"><option value="CUP">CUP</option><option value="USD">USD</option><option value="EUR">EUR</option></select></div>
+        </div>
+        <div class="g2" style="margin-bottom:8px">
+          <div class="field"><label>Forma</label><select id="mov-cobro"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option></select></div>
+          <div class="field"><label>Fecha</label><input type="date" id="mov-fecha"></div>
+        </div>
+        <div class="field"><label>Descripción (opcional)</label><input type="text" id="mov-desc" placeholder="ej. carga del Byd W"></div>
+        <button class="btn btnacc" onclick="registrarMovimiento()" style="margin-top:8px">Registrar</button>
+      </div>
+
+      <div class="sh">Gráficos del período (en USD canónico)</div>
+      <div id="caja-charts-loading" style="font-size:12px;color:var(--txt3);text-align:center;padding:20px">Cargando gráficos…</div>
+      <div id="caja-charts-area" style="display:none">
+        <div class="card" style="padding:8px"><canvas id="chart-flujo" style="max-height:240px"></canvas></div>
+        <div class="card" style="padding:8px;margin-top:10px"><canvas id="chart-saldo" style="max-height:200px"></canvas></div>
+        <div class="card" style="padding:8px;margin-top:10px"><canvas id="chart-gastos" style="max-height:240px"></canvas></div>
+        <div class="card" style="padding:8px;margin-top:10px"><canvas id="chart-choferes" style="max-height:200px"></canvas></div>
+      </div>
+
+      <div class="sh">Movimientos del período</div>
+      <div id="caja-movs-list" style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;padding:6px 10px;font-size:12px"></div>
 
       <div class="spacer"></div>
     </div>
@@ -1418,8 +1509,9 @@ async function saveSalaryPct() {
 async function registrarPago(kind) {
   // kind: 'salario' | 'propina'  (default 'salario' si no se pasa)
   kind = kind === 'propina' ? 'propina' : 'salario';
-  const inputId = kind === 'propina' ? 'det-tip-pago-amt' : 'det-pago-amt';
-  const curId   = kind === 'propina' ? 'det-tip-pago-cur' : 'det-pago-cur';
+  const inputId = kind === 'propina' ? 'det-tip-pago-amt'   : 'det-pago-amt';
+  const curId   = kind === 'propina' ? 'det-tip-pago-cur'   : 'det-pago-cur';
+  const cobroId = kind === 'propina' ? 'det-tip-pago-cobro' : 'det-pago-cobro';
 
   const sel = $('det-driver');
   if (!sel || !sel.value) { toast('Selecciona un chofer primero'); return; }
@@ -1427,6 +1519,7 @@ async function registrarPago(kind) {
   const amt = parseFloat($(inputId).value);
   if (!amt || amt <= 0) { toast('Monto del pago inválido'); return; }
   const currency = $(curId).value || 'CUP';
+  const cobro = $(cobroId) ? ($(cobroId).value || 'efectivo') : 'efectivo';
 
   if (!fxCache) {
     if (!confirm('No hay tasa de cambio fijada. El pago se guardará pero no se podrá convertir a USD para el cálculo de pendiente. ¿Continuar?')) return;
@@ -1439,6 +1532,7 @@ async function registrarPago(kind) {
     kind, // 'salario' o 'propina' — pagos viejos sin kind se asumen 'salario'
     amount: amt,
     currency,
+    cobro, // 'efectivo' | 'transferencia' — afecta qué celda de caja se descuenta
     amount_usd: usd ? usd.usd : (currency === 'USD' ? amt : null),
     fx_rate_used: usd ? usd.rate_used : null,
     fx_rate_date: usd ? usd.rate_date : null,
@@ -1514,6 +1608,7 @@ function showATab(name, el) {
   if (name === 'resumen') loadResumen();
   if (name === 'historial') loadHistorial();
   if (name === 'detalle') loadDetalle();
+  if (name === 'caja') loadCaja();
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
 }
@@ -2813,6 +2908,494 @@ function saveDescModal() {
     }
   });
   closeDescModal();
+}
+
+// ════════════════════════════════════════
+// CAJA EMPRESA: matriz multi-moneda + movimientos + gráficos
+// ════════════════════════════════════════
+const CAJA_CATEGORIAS = {
+  gasto: [
+    { id: 'combustible',     name: 'Combustible / carga eléctrica' },
+    { id: 'mantenimiento',   name: 'Mantenimiento' },
+    { id: 'peajes-parqueo',  name: 'Peajes / parqueo' },
+    { id: 'comidas-insumos', name: 'Comidas / insumos' },
+    { id: 'multas',          name: 'Multas' },
+    { id: 'sueldos-extra',   name: 'Sueldos extra (ayudante, mecánico)' },
+    { id: 'otros-gastos',    name: 'Otros gastos' },
+  ],
+  ingreso_extra: [
+    { id: 'venta-activo',     name: 'Venta de activo' },
+    { id: 'capital-aportado', name: 'Capital aportado' },
+    { id: 'otros-ingresos',   name: 'Otros ingresos' },
+  ],
+};
+
+let cajaPeriod = 'week';
+
+function setCajaPeriod(p) {
+  cajaPeriod = p;
+  document.querySelectorAll('.caja-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === p));
+  loadCaja();
+}
+
+function getCajaDateRange() {
+  const now = new Date();
+  if (cajaPeriod === 'all') {
+    return { label: 'Todo', filter: () => true, dates: null };
+  }
+  if (cajaPeriod === 'day') {
+    const today = new Date(now); today.setHours(0,0,0,0);
+    const t = today.toISOString().slice(0,10);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+    const tt = tomorrow.toISOString().slice(0,10);
+    return {
+      label: today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'}),
+      dates: [t, tt],
+      filter: (item) => {
+        if (!item || !item.date) return false;
+        const time = item.time || (item.paid_at ? item.paid_at.slice(11,16) : '12:00');
+        const [hh] = (time||'12:00').split(':').map(Number);
+        if (item.date === t && hh >= 4) return true;
+        if (item.date === tt && hh < 4) return true;
+        return false;
+      }
+    };
+  }
+  const days = cajaPeriod === 'week' ? 7 : 30;
+  const dates = [];
+  const today = new Date(now); today.setHours(0,0,0,0);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return {
+    label: cajaPeriod === 'week' ? 'Últimos 7 días' : 'Últimos 30 días',
+    dates,
+    filter: (item) => item && item.date && dates.includes(item.date),
+  };
+}
+
+// ── Saldo inicial ──
+function emptySaldoInicial() {
+  return {
+    CUP: { efectivo: 0, transferencia: 0 },
+    USD: { efectivo: 0, transferencia: 0 },
+    EUR: { efectivo: 0, transferencia: 0 },
+  };
+}
+
+let cajaInicialCache = null;
+
+async function loadSaldoInicial() {
+  if (!fbRef || !isOnline) {
+    try { return JSON.parse(localStorage.getItem('fc_caja_inicial') || 'null') || emptySaldoInicial(); }
+    catch(e) { return emptySaldoInicial(); }
+  }
+  try {
+    const snap = await fbRef.ref('caja/saldo_inicial').once('value');
+    const v = snap.val() || emptySaldoInicial();
+    // Garantizar estructura completa
+    ['CUP','USD','EUR'].forEach(c => {
+      if (!v[c]) v[c] = { efectivo: 0, transferencia: 0 };
+      if (typeof v[c].efectivo !== 'number') v[c].efectivo = 0;
+      if (typeof v[c].transferencia !== 'number') v[c].transferencia = 0;
+    });
+    cajaInicialCache = v;
+    localStorage.setItem('fc_caja_inicial', JSON.stringify(v));
+    return v;
+  } catch(e) { return emptySaldoInicial(); }
+}
+
+async function saveCajaInicial() {
+  const data = emptySaldoInicial();
+  ['CUP','USD','EUR'].forEach(c => {
+    ['efectivo','transferencia'].forEach(f => {
+      const el = $(`saldoini-${c}-${f}`);
+      if (el) data[c][f] = parseFloat(el.value) || 0;
+    });
+  });
+  data.set_at = new Date().toISOString();
+  data.set_by = currentUser ? currentUser.id : 'admin';
+  if (!fbRef || !isOnline) {
+    localStorage.setItem('fc_caja_inicial', JSON.stringify(data));
+    cajaInicialCache = data;
+    toast('Sin conexión — guardado solo local');
+    loadCaja();
+    return;
+  }
+  try {
+    await fbRef.ref('caja/saldo_inicial').set(data);
+    cajaInicialCache = data;
+    localStorage.setItem('fc_caja_inicial', JSON.stringify(data));
+    toast('Saldo inicial guardado ✓');
+    loadCaja();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+function renderSaldoInicialInputs(saldo) {
+  const tb = $('caja-inicial-tbody');
+  if (!tb) return;
+  tb.innerHTML = ['CUP','USD','EUR'].map(c => `
+    <tr>
+      <td style="font-weight:600;color:var(--txt)">${c}</td>
+      <td><input type="number" id="saldoini-${c}-efectivo"      value="${saldo[c].efectivo || 0}"      style="width:100%;padding:6px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit"></td>
+      <td><input type="number" id="saldoini-${c}-transferencia" value="${saldo[c].transferencia || 0}" style="width:100%;padding:6px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit"></td>
+    </tr>
+  `).join('');
+}
+
+// ── Movimientos manuales ──
+async function fetchMovimientos() {
+  if (!fbRef || !isOnline) return [];
+  try {
+    const snap = await fbRef.ref('movimientos').once('value');
+    return Object.values(snap.val() || {});
+  } catch(e) { return []; }
+}
+
+function populateCategoriaSelect() {
+  const tipo = $('mov-tipo')?.value || 'gasto';
+  const sel = $('mov-categoria');
+  if (!sel) return;
+  const opts = CAJA_CATEGORIAS[tipo] || [];
+  sel.innerHTML = opts.map(o => `<option value="${o.id}">${o.name}</option>`).join('');
+}
+
+async function registrarMovimiento() {
+  const tipo = $('mov-tipo').value;
+  const categoria = $('mov-categoria').value;
+  const amt = parseFloat($('mov-amt').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('mov-cur').value;
+  const cobro = $('mov-cobro').value;
+  const fecha = $('mov-fecha').value || todayStr();
+  const desc = $('mov-desc').value.trim();
+  const usd = convertToUsd(amt, currency);
+  const mov = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    tipo, categoria,
+    amount: amt, currency, cobro,
+    amount_usd: usd ? usd.usd : (currency === 'USD' ? amt : null),
+    fx_rate_used: usd ? usd.rate_used : null,
+    fx_rate_date: usd ? usd.rate_date : null,
+    date: fecha,
+    descripcion: desc,
+    created_at: new Date().toISOString(),
+    created_by: currentUser ? currentUser.id : 'admin',
+  };
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`movimientos/${mov.id}`).set(mov);
+    toast(`${tipo === 'gasto' ? 'Gasto' : 'Ingreso'} registrado: ${Math.round(amt).toLocaleString('es')} ${currency}`);
+    $('mov-amt').value = ''; $('mov-desc').value = '';
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function delMovimiento(movId) {
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  try { await fbRef.ref(`movimientos/${movId}`).remove(); toast('Movimiento eliminado'); loadCaja(); }
+  catch(e) { toast('Error: ' + e.message); }
+}
+
+// ── Cálculo de la matriz de saldos ──
+function emptyMatriz() {
+  return {
+    CUP: { efectivo: 0, transferencia: 0 },
+    USD: { efectivo: 0, transferencia: 0 },
+    EUR: { efectivo: 0, transferencia: 0 },
+  };
+}
+
+function aplicarATraza(matriz, currency, cobro, monto) {
+  const c = (currency || 'CUP').toUpperCase();
+  const f = (cobro === 'transferencia') ? 'transferencia' : 'efectivo';
+  if (!matriz[c]) matriz[c] = { efectivo: 0, transferencia: 0 };
+  matriz[c][f] = (matriz[c][f] || 0) + monto;
+}
+
+async function loadCaja() {
+  // Cargar y mostrar saldo inicial
+  const saldo = await loadSaldoInicial();
+  cajaInicialCache = saldo;
+  renderSaldoInicialInputs(saldo);
+
+  // Categorías del select
+  populateCategoriaSelect();
+  if ($('mov-tipo')) $('mov-tipo').onchange = populateCategoriaSelect;
+  if ($('mov-fecha') && !$('mov-fecha').value) $('mov-fecha').value = todayStr();
+
+  // Datos: trips, pagos a choferes, movimientos manuales
+  const range = getCajaDateRange();
+  const salaryPct = getSalaryPercent();
+  const empresaPct = (100 - salaryPct) / 100;
+
+  // Traer trips de Firebase (todos los días que el rango toca)
+  let allTrips = [];
+  let allPagos = [];
+  if (fbRef && isOnline) {
+    try {
+      const tSnap = await fbRef.ref('trips').once('value');
+      const days = tSnap.val() || {};
+      Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
+        if (t && typeof t === 'object') allTrips.push(t);
+      }));
+      const pSnap = await fbRef.ref('pagos').once('value');
+      const drvs = pSnap.val() || {};
+      Object.values(drvs).forEach(d => Object.values(d || {}).forEach(p => {
+        if (p && typeof p === 'object') allPagos.push(p);
+      }));
+    } catch(e) { console.error(e); }
+  }
+  const movsAll = await fetchMovimientos();
+
+  // Filtrar por rango
+  const trips = allTrips.filter(range.filter);
+  const pagos = allPagos.filter(range.filter);
+  const movs  = movsAll.filter(range.filter);
+
+  // ─── Construcción de la matriz ───
+  // 1) Punto de partida: saldo inicial (siempre, no depende del rango)
+  const matriz = emptyMatriz();
+  ['CUP','USD','EUR'].forEach(c => {
+    matriz[c].efectivo      = saldo[c].efectivo      || 0;
+    matriz[c].transferencia = saldo[c].transferencia || 0;
+  });
+
+  // 2) Ingresos por carrera del período: 85% (o lo que quede sin salario) del NETO,
+  //    en la moneda y forma de la carrera. Mantenemos denominaciones.
+  trips.forEach(t => {
+    const ingreso = (t.netAmount || 0) * empresaPct;
+    aplicarATraza(matriz, t.currency, t.cobro, ingreso);
+  });
+
+  // 3) Pagos a choferes (salario + propina): salen de caja en su moneda y forma.
+  //    Pagos viejos sin cobro se asumen efectivo.
+  pagos.forEach(p => {
+    const cobro = p.cobro || 'efectivo';
+    aplicarATraza(matriz, p.currency, cobro, -(p.amount || 0));
+  });
+
+  // 4) Movimientos manuales
+  movs.forEach(m => {
+    const sign = m.tipo === 'gasto' ? -1 : 1;
+    aplicarATraza(matriz, m.currency, m.cobro, sign * (m.amount || 0));
+  });
+
+  // ─── Render saldo ───
+  const tb = $('caja-saldo-tbody');
+  if (tb) {
+    const fmt = n => n ? Math.round(n).toLocaleString('es') : '—';
+    tb.innerHTML = ['CUP','USD','EUR'].map(c => {
+      const e = matriz[c].efectivo, tr = matriz[c].transferencia, total = e + tr;
+      return `<tr style="border-top:1px solid var(--brd)">
+        <td style="padding:9px 10px;font-weight:600">${c}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:500">${fmt(e)}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:500">${fmt(tr)}</td>
+        <td style="padding:9px 10px;text-align:right;font-weight:700">${fmt(total)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Total estimado en USD usando tasa actual
+  let totalUsd = 0;
+  ['CUP','USD','EUR'].forEach(c => {
+    const subtotal = (matriz[c].efectivo || 0) + (matriz[c].transferencia || 0);
+    if (c === 'USD') totalUsd += subtotal;
+    else if (fxCache) {
+      const u = convertToUsd(subtotal, c);
+      if (u) totalUsd += u.usd;
+    }
+  });
+  if ($('caja-saldo-total-usd')) {
+    $('caja-saldo-total-usd').innerHTML = totalUsd
+      ? `Total estimado en USD: <strong style="color:${totalUsd >= 0 ? 'var(--g)' : 'var(--re)'}">$${totalUsd >= 0 ? '' : '-'}${Math.abs(Math.round(totalUsd)).toLocaleString('es')}</strong>`
+      : 'Total estimado en USD: $0';
+  }
+  const fxN = $('caja-fx-note');
+  if (fxN) {
+    if (fxCache) {
+      const cup = fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : '?');
+      fxN.textContent = `Conversión USD: 1 USD = ${cup} CUP · 1 EUR = ${fxCache.eur_a_usd || fxCache.EUR_a_USD || '?'} USD (período: ${range.label})`;
+    } else {
+      fxN.innerHTML = '<span style="color:var(--am)">⚠ Sin tasa fijada — Total USD estimado solo cuenta lo que está en USD.</span>';
+    }
+  }
+
+  // ─── Lista de movimientos manuales ───
+  const movsListEl = $('caja-movs-list');
+  if (movsListEl) {
+    if (!movs.length) {
+      movsListEl.innerHTML = '<div style="color:var(--txt3);text-align:center;padding:14px">Sin movimientos manuales en este período.</div>';
+    } else {
+      const sorted = [...movs].sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+      movsListEl.innerHTML = sorted.map(m => {
+        const cat = (CAJA_CATEGORIAS[m.tipo] || []).find(c => c.id === m.categoria);
+        const catName = cat ? cat.name : m.categoria;
+        const sign = m.tipo === 'gasto' ? '-' : '+';
+        const color = m.tipo === 'gasto' ? 'var(--re)' : 'var(--g)';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--brd);gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${catName}</div>
+            <div style="font-size:10px;color:var(--txt3)">${m.date} · ${m.cobro} ${m.descripcion ? '· ' + m.descripcion : ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:600;color:${color}">${sign}${Math.round(m.amount).toLocaleString('es')} ${m.currency}</div>
+          </div>
+          <button onclick="delMovimiento('${m.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:2px 6px">✕</button>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // ─── Gráficos (lazy load Chart.js) ───
+  await renderCajaCharts(trips, pagos, movs, range, salaryPct);
+}
+
+// ── Gráficos con Chart.js (lazy) ──
+let chartJsReady = false;
+let cajaChartInstances = { flujo: null, saldo: null, gastos: null, choferes: null };
+
+async function ensureChartJs() {
+  if (chartJsReady) return true;
+  if (window.Chart) { chartJsReady = true; return true; }
+  return new Promise(res => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    s.onload = () => { chartJsReady = true; res(true); };
+    s.onerror = () => res(false);
+    document.head.appendChild(s);
+  });
+}
+
+function tripUsd(t, field) {
+  const usdField = field + '_usd';
+  if (typeof t[usdField] === 'number') return t[usdField];
+  if ((t.currency || 'CUP').toUpperCase() === 'USD') return t[field] || 0;
+  if (fxCache) {
+    const v = convertToUsd(t[field] || 0, t.currency || 'CUP');
+    if (v) return v.usd;
+  }
+  return 0;
+}
+
+async function renderCajaCharts(trips, pagos, movs, range, salaryPct) {
+  const loadingEl = $('caja-charts-loading');
+  const areaEl    = $('caja-charts-area');
+  const ok = await ensureChartJs();
+  if (!ok) {
+    if (loadingEl) loadingEl.textContent = 'No se pudo cargar Chart.js (sin conexión).';
+    return;
+  }
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (areaEl) areaEl.style.display = 'block';
+
+  const empresaPct = (100 - salaryPct) / 100;
+
+  // Destruir instancias previas
+  Object.values(cajaChartInstances).forEach(c => { if (c) c.destroy(); });
+  cajaChartInstances = { flujo: null, saldo: null, gastos: null, choferes: null };
+
+  // Helper para convertir cualquier item a USD
+  const toUsd = (item, field) => {
+    const usdField = field + '_usd';
+    if (typeof item[usdField] === 'number') return item[usdField];
+    if ((item.currency || 'CUP').toUpperCase() === 'USD') return item[field] || 0;
+    if (fxCache) {
+      const v = convertToUsd(item[field] || 0, item.currency || 'CUP');
+      if (v) return v.usd;
+    }
+    return 0;
+  };
+
+  // 1) Flujo: ingresos vs egresos por día (barras)
+  const allDates = new Set();
+  trips.forEach(t => allDates.add(t.date));
+  pagos.forEach(p => allDates.add(p.date));
+  movs.forEach(m  => allDates.add(m.date));
+  const datesSorted = [...allDates].filter(Boolean).sort();
+  const ingresosArr = datesSorted.map(d => {
+    let s = 0;
+    trips.filter(t => t.date === d).forEach(t => s += tripUsd(t, 'netAmount') * empresaPct);
+    movs.filter(m => m.date === d && m.tipo === 'ingreso_extra').forEach(m => s += toUsd(m, 'amount'));
+    return Math.round(s * 100) / 100;
+  });
+  const egresosArr = datesSorted.map(d => {
+    let s = 0;
+    pagos.filter(p => p.date === d).forEach(p => s += toUsd(p, 'amount'));
+    movs.filter(m => m.date === d && m.tipo === 'gasto').forEach(m => s += toUsd(m, 'amount'));
+    return Math.round(s * 100) / 100;
+  });
+  cajaChartInstances.flujo = new Chart($('chart-flujo'), {
+    type: 'bar',
+    data: {
+      labels: datesSorted.map(d => d.slice(5)),
+      datasets: [
+        { label: 'Ingresos USD', data: ingresosArr, backgroundColor: '#3B6D11' },
+        { label: 'Egresos USD',  data: egresosArr,  backgroundColor: '#A32D2D' },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Ingresos vs Egresos · USD' } } }
+  });
+
+  // 2) Saldo en el tiempo (línea): saldo USD acumulado total partiendo de saldo inicial USD aprox
+  let saldoIni = 0;
+  if (cajaInicialCache) {
+    ['CUP','USD','EUR'].forEach(c => {
+      const sub = (cajaInicialCache[c]?.efectivo || 0) + (cajaInicialCache[c]?.transferencia || 0);
+      if (c === 'USD') saldoIni += sub;
+      else if (fxCache) {
+        const u = convertToUsd(sub, c);
+        if (u) saldoIni += u.usd;
+      }
+    });
+  }
+  let saldoAcum = saldoIni;
+  const saldoArr = datesSorted.map((d, i) => {
+    saldoAcum += (ingresosArr[i] - egresosArr[i]);
+    return Math.round(saldoAcum * 100) / 100;
+  });
+  cajaChartInstances.saldo = new Chart($('chart-saldo'), {
+    type: 'line',
+    data: { labels: datesSorted.map(d => d.slice(5)), datasets: [{ label: 'Saldo USD', data: saldoArr, borderColor: '#185FA5', backgroundColor: 'rgba(24,95,165,.15)', fill: true, tension: 0.2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Saldo de caja en el tiempo · USD' } } }
+  });
+
+  // 3) Distribución de gastos por categoría (donut)
+  const gastosPorCat = {};
+  movs.filter(m => m.tipo === 'gasto').forEach(m => {
+    const cat = (CAJA_CATEGORIAS.gasto.find(c => c.id === m.categoria) || {}).name || m.categoria;
+    gastosPorCat[cat] = (gastosPorCat[cat] || 0) + toUsd(m, 'amount');
+  });
+  // Pagos a choferes los agrupamos también como "Pagos a choferes"
+  const pagosChoferUsd = pagos.reduce((s, p) => s + toUsd(p, 'amount'), 0);
+  if (pagosChoferUsd > 0) gastosPorCat['Pagos a choferes'] = pagosChoferUsd;
+  const palette = ['#A32D2D','#854F0B','#534AB7','#185FA5','#3B6D11','#0F6E56','#888780','#D85A30'];
+  const catLabels = Object.keys(gastosPorCat);
+  cajaChartInstances.gastos = new Chart($('chart-gastos'), {
+    type: 'doughnut',
+    data: { labels: catLabels, datasets: [{ data: catLabels.map(k => Math.round(gastosPorCat[k]*100)/100), backgroundColor: catLabels.map((_,i)=>palette[i%palette.length]) }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Distribución de egresos · USD' }, legend: { position: 'right' } } }
+  });
+
+  // 4) Top choferes por aporte a la empresa (barras)
+  const aportePorChofer = {};
+  trips.forEach(t => {
+    const did = t.driverId || '?';
+    const aporte = tripUsd(t, 'netAmount') * empresaPct;
+    aportePorChofer[did] = (aportePorChofer[did] || 0) + aporte;
+  });
+  const drv = getDrivers();
+  const aportes = Object.entries(aportePorChofer)
+    .map(([id, v]) => ({ name: (drv.find(d => d.id === id)?.name) || id, v }))
+    .sort((a,b) => b.v - a.v);
+  cajaChartInstances.choferes = new Chart($('chart-choferes'), {
+    type: 'bar',
+    data: { labels: aportes.map(a => a.name), datasets: [{ label: 'Aporte USD', data: aportes.map(a => Math.round(a.v*100)/100), backgroundColor: '#0F6E56' }] },
+    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { title: { display: true, text: 'Aporte a la empresa por chofer · USD' } } }
+  });
 }
 
 // ══ SHIFT MANAGEMENT ══
