@@ -484,6 +484,13 @@ audio{width:100%;height:36px;margin-top:6px}
           <div class="dcname">La Nave</div>
           <div class="dccom" id="lbl-nave">20%</div>
         </div>
+        <div class="dcbtn" id="cb-nave_billetera" onclick="selCanal('nave_billetera')" style="grid-column:1/-1">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+            <div class="dcdot nave"></div>
+            <div class="dcname">Nave Billetera</div>
+            <div class="dccom" id="lbl-nave-billetera">20%</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1163,8 +1170,8 @@ const VEHICULOS = [
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
-const SRC = { nave:'La Nave', cinco:'Cinco', wapp:'WhatsApp', directo:'Directa' };
-const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo' };
+const SRC = { nave:'La Nave', cinco:'Cinco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera' };
+const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave' };
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
 let currentUser = null;
@@ -2172,7 +2179,27 @@ async function loadDetalle() {
 function selCanal(src) {
   selCan = src;
   document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
-  $('cb-' + src).className = 'dcbtn sel-' + src;
+  // 'nave_billetera' usa el estilo visual de 'nave' (mismo color rojo)
+  const styleClass = (src === 'nave_billetera') ? 'sel-nave' : 'sel-' + src;
+  $('cb-' + src).className = 'dcbtn ' + styleClass;
+  // Mantener el span ancho-completo del botón Nave Billetera
+  if (src === 'nave_billetera') $('cb-' + src).style.gridColumn = '1/-1';
+
+  // Si es Nave Billetera: el dinero NO entra a caja, así que la forma
+  // (efectivo/transferencia) no aplica. Ocultamos los botones de cobro.
+  const pagoSection = document.querySelector('.d-pago');
+  if (pagoSection) {
+    if (src === 'nave_billetera') {
+      pagoSection.style.display = 'none';
+      // También limpiamos selCobroType para que la validación lo permita
+      selCobroType = 'billetera';
+      document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
+    } else {
+      pagoSection.style.display = '';
+      // Si veníamos de billetera, resetear el cobro
+      if (selCobroType === 'billetera') selCobroType = null;
+    }
+  }
   updNet();
 }
 
@@ -2185,7 +2212,13 @@ function selCobro(type) {
 function getCom(s) {
   const cfg = getCfg();
   const c = cfg.commissions || { nave:20, cinco:10, wapp:10 };
-  return { nave: c.nave||20, cinco: c.cinco||10, wapp: c.wapp||10, directo: 0 }[s] ?? 0;
+  return {
+    nave: c.nave||20,
+    cinco: c.cinco||10,
+    wapp: c.wapp||10,
+    directo: 0,
+    nave_billetera: c.nave||20  // misma comisión que La Nave
+  }[s] ?? 0;
 }
 
 function updNet() {
@@ -2245,7 +2278,12 @@ async function regTrip() {
   if (!selCan) { toast('Selecciona el canal'); return; }
   const amt = parseFloat($('f-amt').value);
   if (!amt || amt <= 0) { toast('Ingresa el monto de la carrera'); return; }
-  if (!selCobroType) { toast('Selecciona la forma de cobro'); return; }
+  // Para Nave Billetera no se pide forma de cobro (el dinero no entra a caja).
+  if (selCan === 'nave_billetera') {
+    selCobroType = 'billetera';
+  } else if (!selCobroType) {
+    toast('Selecciona la forma de cobro'); return;
+  }
 
   // Total cobrado (opcional). Si no se llena, asumimos = monto carrera (sin propina).
   const totalRaw = $('f-total') ? $('f-total').value : '';
@@ -2330,6 +2368,9 @@ async function regTrip() {
   selCobroType = null;
   document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
   document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
+  // Restaurar visibilidad del bloque de pago (puede estar oculto si la última fue Nave Billetera)
+  const pagoSection = document.querySelector('.d-pago');
+  if (pagoSection) pagoSection.style.display = '';
 
   loadDriverTrips();
 }
@@ -3389,7 +3430,10 @@ async function loadCaja() {
 
   // 2) Ingresos por carrera: TOTAL recibido del cliente = amount + tipAmount
   //    en moneda y forma de la carrera (mantenemos denominaciones).
+  //    EXCEPCIÓN: 'nave_billetera' — el cliente paga directamente a La Nave,
+  //    el dinero NO entra a caja (no se aplica a la matriz).
   trips.forEach(t => {
+    if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     const total = (t.amount || 0) + (t.tipAmount || 0);
     aplicarATraza(matriz, t.currency, t.cobro, total);
   });
@@ -3427,26 +3471,45 @@ async function loadCaja() {
 
   // ─── Comisiones acumuladas por canal (USD canónico) ───
   // Acumulado: suma de commAmount_usd de carreras del periodo, agrupadas por source.
-  // Pagado: suma de pagos a canal del periodo, agrupados por canal.
+  // Carreras 'nave_billetera' suman a la deuda 'nave' (es la misma La Nave).
+  // Pagado: suma de pagos manuales a canal + total cobrado de carreras
+  // billetera (porque ese dinero ya lo cobró La Nave directamente).
   const comisionAcum = { nave: 0, cinco: 0, wapp: 0 };
+  let billeteraAutoPagado = 0; // total cobrado por carreras billetera, va a "pagado a Nave"
   trips.forEach(t => {
     const canal = t.source;
-    if (!CANAL_NAMES[canal]) return; // 'directo' no genera deuda
+    if (canal !== 'nave' && canal !== 'cinco' && canal !== 'wapp' && canal !== 'nave_billetera') return;
     let commUsd = (typeof t.commAmount_usd === 'number') ? t.commAmount_usd : null;
     if (commUsd === null) {
-      // Fallback: convertir on-the-fly si no hay congelado
       if ((t.currency || 'CUP').toUpperCase() === 'USD') commUsd = t.commAmount || 0;
       else if (fxCache) {
         const v = convertToUsd(t.commAmount || 0, t.currency || 'CUP');
         commUsd = v ? v.usd : 0;
       } else { commUsd = 0; }
     }
-    comisionAcum[canal] += commUsd;
+    // Comisión acumulada — para nave_billetera va al bucket 'nave'
+    const bucket = (canal === 'nave_billetera') ? 'nave' : canal;
+    comisionAcum[bucket] += commUsd;
+    // Si es billetera, el total cobrado entero (amount + propina si la hubo)
+    // se cuenta como "pago anticipado" a La Nave (porque cobró directo).
+    if (canal === 'nave_billetera') {
+      const total = (t.amount || 0) + (t.tipAmount || 0);
+      let totalUsd;
+      if ((t.currency || 'CUP').toUpperCase() === 'USD') totalUsd = total;
+      else if (fxCache) {
+        const v = convertToUsd(total, t.currency || 'CUP');
+        totalUsd = v ? v.usd : 0;
+      } else { totalUsd = 0; }
+      billeteraAutoPagado += totalUsd;
+    }
   });
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
   pagosCanal.forEach(pc => {
     if (CANAL_NAMES[pc.canal]) pagadoCanal[pc.canal] += (pc.amount_usd || pc.amount || 0);
   });
+  // Sumar el auto-pago de billetera a La Nave (NO se descuenta de caja porque
+  // las carreras billetera ya no entraron a caja en el paso 2).
+  pagadoCanal.nave += billeteraAutoPagado;
 
   // ─── Render comisiones por canal ───
   const canalesEl = $('caja-canales-list');
@@ -3564,7 +3627,7 @@ async function loadCaja() {
   }
 
   // ─── Gráficos (lazy load Chart.js) ───
-  await renderCajaCharts(trips, pagos, movs, range, salaryPct);
+  await renderCajaCharts(trips, pagos, pagosCanal, movs, range, salaryPct);
 }
 
 // ── Gráficos con Chart.js (lazy) ──
@@ -3594,7 +3657,7 @@ function tripUsd(t, field) {
   return 0;
 }
 
-async function renderCajaCharts(trips, pagos, movs, range, salaryPct) {
+async function renderCajaCharts(trips, pagos, pagosCanal, movs, range, salaryPct) {
   const loadingEl = $('caja-charts-loading');
   const areaEl    = $('caja-charts-area');
   const ok = await ensureChartJs();
@@ -3611,7 +3674,6 @@ async function renderCajaCharts(trips, pagos, movs, range, salaryPct) {
   Object.values(cajaChartInstances).forEach(c => { if (c) c.destroy(); });
   cajaChartInstances = { flujo: null, saldo: null, gastos: null, choferes: null };
 
-  // Helper para convertir cualquier item a USD
   const toUsd = (item, field) => {
     const usdField = field + '_usd';
     if (typeof item[usdField] === 'number') return item[usdField];
@@ -3623,21 +3685,28 @@ async function renderCajaCharts(trips, pagos, movs, range, salaryPct) {
     return 0;
   };
 
-  // 1) Flujo: ingresos vs egresos por día (barras)
+  // 1) Flujo: ingresos vs egresos por día (barras) — modelo nuevo
+  // Ingresos: total cobrado (amount + tip) de carreras NO billetera +
+  //           ingresos extras manuales.
+  // Egresos: pagos a choferes + pagos a canales + gastos manuales.
   const allDates = new Set();
   trips.forEach(t => allDates.add(t.date));
   pagos.forEach(p => allDates.add(p.date));
+  pagosCanal.forEach(pc => allDates.add(pc.date));
   movs.forEach(m  => allDates.add(m.date));
   const datesSorted = [...allDates].filter(Boolean).sort();
   const ingresosArr = datesSorted.map(d => {
     let s = 0;
-    trips.filter(t => t.date === d).forEach(t => s += tripUsd(t, 'netAmount') * empresaPct);
+    trips.filter(t => t.date === d && t.source !== 'nave_billetera' && t.cobro !== 'billetera').forEach(t => {
+      s += toUsd(t, 'amount') + (t.tipAmount ? toUsd(t, 'tipAmount') : 0);
+    });
     movs.filter(m => m.date === d && m.tipo === 'ingreso_extra').forEach(m => s += toUsd(m, 'amount'));
     return Math.round(s * 100) / 100;
   });
   const egresosArr = datesSorted.map(d => {
     let s = 0;
     pagos.filter(p => p.date === d).forEach(p => s += toUsd(p, 'amount'));
+    pagosCanal.filter(pc => pc.date === d).forEach(pc => s += (pc.amount_usd || pc.amount || 0));
     movs.filter(m => m.date === d && m.tipo === 'gasto').forEach(m => s += toUsd(m, 'amount'));
     return Math.round(s * 100) / 100;
   });
@@ -3682,9 +3751,14 @@ async function renderCajaCharts(trips, pagos, movs, range, salaryPct) {
     const cat = (CAJA_CATEGORIAS.gasto.find(c => c.id === m.categoria) || {}).name || m.categoria;
     gastosPorCat[cat] = (gastosPorCat[cat] || 0) + toUsd(m, 'amount');
   });
-  // Pagos a choferes los agrupamos también como "Pagos a choferes"
+  // Pagos a choferes agrupados como "Pagos a choferes"
   const pagosChoferUsd = pagos.reduce((s, p) => s + toUsd(p, 'amount'), 0);
   if (pagosChoferUsd > 0) gastosPorCat['Pagos a choferes'] = pagosChoferUsd;
+  // Pagos a canales agrupados por canal
+  ['nave','cinco','wapp'].forEach(canal => {
+    const t = pagosCanal.filter(pc => pc.canal === canal).reduce((s, pc) => s + (pc.amount_usd || pc.amount || 0), 0);
+    if (t > 0) gastosPorCat['Pagos a ' + (CANAL_NAMES[canal] || canal)] = t;
+  });
   const palette = ['#A32D2D','#854F0B','#534AB7','#185FA5','#3B6D11','#0F6E56','#888780','#D85A30'];
   const catLabels = Object.keys(gastosPorCat);
   cajaChartInstances.gastos = new Chart($('chart-gastos'), {
