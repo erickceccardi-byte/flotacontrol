@@ -775,6 +775,54 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
       </div>
 
+      <div class="sh">Bono trimestral <span id="det-bonus-pct-lbl" style="color:var(--txt3);font-weight:400;font-size:11px">(5% del neto últimos 90 días)</span></div>
+      <div class="card" id="det-bonus-card">
+        <div id="det-bonus-status" style="font-size:11px;padding:6px 10px;border-radius:6px;margin-bottom:8px;background:var(--bg3)"></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+          <span>Neto acumulado (90 días):</span>
+          <span style="text-align:right">
+            <span id="det-bonus-base-usd" style="font-weight:600">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-bonus-base-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
+          <span>Bono calculado:</span>
+          <span style="text-align:right">
+            <span id="det-bonus-amt-usd" style="font-weight:600;color:var(--g)">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-bonus-amt-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
+          <span>Pagado en el período:</span>
+          <span style="text-align:right">
+            <span id="det-bonus-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-bonus-pagado-cup"></span>
+          </span>
+        </div>
+
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
+          <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Pagar bono trimestral</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="number" id="det-bonus-pago-amt" placeholder="0" inputmode="decimal" style="flex:1 1 90px;min-width:80px;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+            <select id="det-bonus-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="CUP">CUP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+            <select id="det-bonus-pago-cobro" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="efectivo">💵 Efec.</option>
+              <option value="transferencia">📲 Transf.</option>
+            </select>
+            <button class="btn btnacc" id="det-bonus-pay-btn" onclick="registrarPago('bono_trimestral')" style="white-space:nowrap">Pagar</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de bono del período</div>
+          <div id="det-bonus-pagos-list" style="font-size:12px"></div>
+        </div>
+      </div>
+
       <div class="sh">Desglose por moneda × forma de pago</div>
       <div style="background:var(--bg);border:1px solid var(--brd);border-radius:10px;overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -826,6 +874,12 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-saldo-total-usd" style="text-align:center;font-size:13px;color:var(--txt2);margin-top:10px;font-weight:500"></div>
       <div id="caja-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-2px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Comisiones por canal (USD)</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
+        Comisiones acumuladas por carreras del período. Se pagan siempre en <strong>USD efectivo</strong> (sin importar la moneda original de las carreras).
+      </div>
+      <div id="caja-canales-list"></div>
 
       <div class="sh">Saldo inicial de caja</div>
       <div class="card" id="caja-saldo-inicial-card">
@@ -955,6 +1009,18 @@ audio{width:100%;height:36px;margin-top:6px}
           <input type="number" id="cfg-salary-pct" value="15" min="0" max="100" step="0.5">
         </div>
         <button class="btn btnacc" onclick="saveSalaryPct()">Guardar % salario</button>
+      </div>
+
+      <div class="sh">Bono trimestral del chofer</div>
+      <div class="card">
+        <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
+          Bono adicional al salario, calculado como <strong>% del neto USD acumulado en los últimos 90 días</strong>. Solo se paga si el chofer no tuvo percances en ese trimestre (checkbox por chofer en pestaña Choferes). Default 5%.
+        </div>
+        <div class="field">
+          <label>% del neto que va al bono trimestral</label>
+          <input type="number" id="cfg-bonus-pct" value="5" min="0" max="100" step="0.5">
+        </div>
+        <button class="btn btnacc" onclick="saveBonusPct()">Guardar % bono</button>
       </div>
 
       <div class="sh">Tipo de cambio del día</div>
@@ -1502,20 +1568,44 @@ async function saveSalaryPct() {
   cfg.salary_pct = v;
   setCfg(cfg);
   toast(`% salario guardado (${v}%)`);
-  // Refrescar el label en Detalle si está visible
   if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${v}% del neto)`;
 }
 
+function getBonusPercent() {
+  const cfg = getCfg();
+  const pct = parseFloat(cfg.bonus_pct);
+  return isNaN(pct) || pct < 0 ? 5 : pct;
+}
+
+async function saveBonusPct() {
+  const v = parseFloat($('cfg-bonus-pct').value);
+  if (isNaN(v) || v < 0 || v > 100) { toast('% inválido (0-100)'); return; }
+  const cfg = getCfg();
+  cfg.bonus_pct = v;
+  setCfg(cfg);
+  toast(`% bono trimestral guardado (${v}%)`);
+}
+
 async function registrarPago(kind) {
-  // kind: 'salario' | 'propina'  (default 'salario' si no se pasa)
-  kind = kind === 'propina' ? 'propina' : 'salario';
-  const inputId = kind === 'propina' ? 'det-tip-pago-amt'   : 'det-pago-amt';
-  const curId   = kind === 'propina' ? 'det-tip-pago-cur'   : 'det-pago-cur';
-  const cobroId = kind === 'propina' ? 'det-tip-pago-cobro' : 'det-pago-cobro';
+  // kind: 'salario' | 'propina' | 'bono_trimestral' (default 'salario')
+  if (!['salario','propina','bono_trimestral'].includes(kind)) kind = 'salario';
+  const idPrefix = kind === 'propina' ? 'det-tip-pago' : (kind === 'bono_trimestral' ? 'det-bonus-pago' : 'det-pago');
+  const inputId = `${idPrefix}-amt`;
+  const curId   = `${idPrefix}-cur`;
+  const cobroId = `${idPrefix}-cobro`;
 
   const sel = $('det-driver');
   if (!sel || !sel.value) { toast('Selecciona un chofer primero'); return; }
   const driverId = sel.value;
+
+  // Si es bono trimestral, validar que el chofer tenga "sin percances" marcado
+  if (kind === 'bono_trimestral') {
+    const sp = getSinPercances();
+    if (!sp[driverId]) {
+      if (!confirm('⚠ Este chofer NO está marcado como "sin percances" en los últimos 90 días.\n\nPara habilitar el bono, ve a admin > Choferes y marca el checkbox.\n\n¿Pagar el bono igualmente?')) return;
+    }
+  }
+
   const amt = parseFloat($(inputId).value);
   if (!amt || amt <= 0) { toast('Monto del pago inválido'); return; }
   const currency = $(curId).value || 'CUP';
@@ -1547,7 +1637,7 @@ async function registrarPago(kind) {
   }
   try {
     await fbRef.ref(`pagos/${driverId}/${pago.id}`).set(pago);
-    const lbl = kind === 'propina' ? 'propinas' : 'salario';
+    const lbl = kind === 'propina' ? 'propinas' : (kind === 'bono_trimestral' ? 'bono trimestral' : 'salario');
     toast(`Pago de ${lbl}: ${Math.round(amt).toLocaleString('es')} ${currency}`);
     $(inputId).value = '';
     loadDetalle();
@@ -1846,12 +1936,13 @@ async function loadDetalle() {
     }
   }
 
-  // ─── Pagos del chofer (split por kind: salario / propina) ───
+  // ─── Pagos del chofer (split por kind: salario / propina / bono) ───
   // Pagos viejos sin kind se asumen 'salario' por retro-compatibilidad.
   const allPagos = await fetchPagosForDriver(driverId);
   const pagosPeriodo = allPagos.filter(p => range.dates.includes(p.date));
   const pagosSalario = pagosPeriodo.filter(p => (p.kind || 'salario') === 'salario');
   const pagosPropina = pagosPeriodo.filter(p => p.kind === 'propina');
+  const pagosBono    = pagosPeriodo.filter(p => p.kind === 'bono_trimestral');
 
   function sumarPagosUsd(pagos) {
     return pagos.reduce((s, p) => {
@@ -1927,6 +2018,59 @@ async function loadDetalle() {
   }
   renderPagosList('det-pagos-list', pagosSalario);
   renderPagosList('det-tip-pagos-list', pagosPropina);
+  renderPagosList('det-bonus-pagos-list', pagosBono);
+
+  // ── Bono trimestral (5% del neto USD acumulado en últimos 90 días) ──
+  const bonusPct = getBonusPercent();
+  if ($('det-bonus-pct-lbl')) $('det-bonus-pct-lbl').textContent = `(${bonusPct}% del neto últimos 90 días)`;
+
+  // Calcular neto de los últimos 90 días, independiente del periodo seleccionado
+  const today90 = new Date(); today90.setHours(0,0,0,0);
+  const min90 = new Date(today90); min90.setDate(min90.getDate() - 90);
+  const min90Str = min90.toISOString().slice(0,10);
+  let trips90 = [];
+  if (fbRef && isOnline) {
+    try {
+      // Pedimos los últimos 90 días + 1 (para cubrir borde)
+      const dates90 = [];
+      for (let i = 0; i <= 90; i++) {
+        const d = new Date(today90); d.setDate(d.getDate() - i);
+        dates90.push(d.toISOString().slice(0,10));
+      }
+      const promises = dates90.map(d => fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({})));
+      const results = await Promise.all(promises);
+      results.forEach(day => Object.values(day).forEach(t => { if (t && typeof t === 'object' && t.driverId === driverId) trips90.push(t); }));
+    } catch(e) {}
+  }
+  const netoBase90 = trips90.reduce((s, t) => s + getTripUsd(t, 'netAmount'), 0);
+  const bonoCalcUsd = netoBase90 * (bonusPct / 100);
+  const bonoCalcCup = (cupRate && bonoCalcUsd) ? Math.round(bonoCalcUsd * cupRate) : null;
+  const baseCup = (cupRate && netoBase90) ? Math.round(netoBase90 * cupRate) : null;
+  const pagadoBonoUsd = sumarPagosUsd(pagosBono);
+  const pagadoBonoCup = (cupRate && pagadoBonoUsd) ? Math.round(pagadoBonoUsd * cupRate) : null;
+
+  if ($('det-bonus-base-usd')) $('det-bonus-base-usd').textContent = netoBase90 ? fmtUsd(netoBase90) : '—';
+  if ($('det-bonus-base-cup')) $('det-bonus-base-cup').textContent = baseCup ? `  ·  ${baseCup.toLocaleString('es')} CUP` : '';
+  if ($('det-bonus-amt-usd'))  $('det-bonus-amt-usd').textContent  = bonoCalcUsd ? fmtUsd(bonoCalcUsd) : '—';
+  if ($('det-bonus-amt-cup'))  $('det-bonus-amt-cup').textContent  = bonoCalcCup ? `  ·  ${bonoCalcCup.toLocaleString('es')} CUP` : '';
+  if ($('det-bonus-pagado-usd')) $('det-bonus-pagado-usd').textContent = pagadoBonoUsd ? '-' + fmtUsd(pagadoBonoUsd) : '—';
+  if ($('det-bonus-pagado-cup')) $('det-bonus-pagado-cup').textContent = pagadoBonoCup ? `  ·  -${pagadoBonoCup.toLocaleString('es')} CUP` : '';
+
+  // Estado: sin percances marcado o no
+  const sp = getSinPercances();
+  const elig = !!sp[driverId];
+  const stEl = $('det-bonus-status');
+  const btn = $('det-bonus-pay-btn');
+  if (stEl) {
+    if (elig) {
+      stEl.innerHTML = '<span style="color:var(--g);font-weight:500">✓ Habilitado para bono</span> · marca de "sin percances" activa.';
+      stEl.style.background = 'var(--gbg)';
+    } else {
+      stEl.innerHTML = '<span style="color:var(--am);font-weight:500">⚠ No habilitado</span> · marca el checkbox "sin percances" del chofer en admin > Choferes para liberar el bono.';
+      stEl.style.background = 'var(--ambg)';
+    }
+  }
+  // El botón se mantiene activo (con confirm dentro de registrarPago si no está elegible)
 
   // Desglose por moneda × forma de pago
   const breakdown = {};
@@ -2528,14 +2672,50 @@ function renderDriverMgmt() {
   const drivers = getDrivers();
   const el = $('drvmgmt-list');
   if (!drivers.length) { el.innerHTML = '<div style="font-size:13px;color:var(--txt3)">No hay conductores creados.</div>'; return; }
-  el.innerHTML = drivers.map(d => `
+  // Cargar estado "sin percances" de localStorage (set por driver id)
+  const sinPercances = getSinPercances();
+  el.innerHTML = drivers.map(d => {
+    const sp = !!sinPercances[d.id];
+    return `
     <div class="drv-mgmt-item">
       <div class="dmi-info">
         <div class="dmi-name">${d.name}</div>
         <div class="dmi-user">Usuario: ${d.username}</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);margin-top:4px;cursor:pointer">
+          <input type="checkbox" ${sp ? 'checked' : ''} onchange="toggleSinPercances('${d.id}', this.checked)" style="margin:0">
+          Sin percances en los últimos 90 días (habilita bono trimestral)
+        </label>
       </div>
       <div class="dmi-del" onclick="removeDriver('${d.id}')">Eliminar</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function getSinPercances() {
+  try { return JSON.parse(localStorage.getItem('fc_sin_percances') || '{}'); }
+  catch(e) { return {}; }
+}
+
+function toggleSinPercances(driverId, checked) {
+  const m = getSinPercances();
+  if (checked) m[driverId] = true; else delete m[driverId];
+  localStorage.setItem('fc_sin_percances', JSON.stringify(m));
+  // Sync a Firebase si hay conexión (compartir entre dispositivos)
+  if (fbRef && isOnline) {
+    try { fbRef.ref(`driver_state/${driverId}/sin_percances`).set(!!checked); } catch(e) {}
+  }
+  toast(checked ? 'Marcado sin percances' : 'Quitada marca de sin percances');
+}
+
+async function syncSinPercancesFromFirebase() {
+  if (!fbRef || !isOnline) return;
+  try {
+    const snap = await fbRef.ref('driver_state').once('value');
+    const v = snap.val() || {};
+    const m = {};
+    Object.entries(v).forEach(([did, st]) => { if (st && st.sin_percances) m[did] = true; });
+    localStorage.setItem('fc_sin_percances', JSON.stringify(m));
+  } catch(e) {}
 }
 
 function addDriver() {
@@ -2569,6 +2749,7 @@ function loadConfigUI() {
   $('cfg-cinco').value = cfg.commissions?.cinco || 10;
   $('cfg-wapp').value  = cfg.commissions?.wapp  || 10;
   if ($('cfg-salary-pct')) $('cfg-salary-pct').value = getSalaryPercent();
+  if ($('cfg-bonus-pct'))  $('cfg-bonus-pct').value  = getBonusPercent();
   if (cfg.firebase) {
     $('fb-key').value  = cfg.firebase.apiKey    || '';
     $('fb-url').value  = cfg.firebase.databaseURL || '';
@@ -3100,6 +3281,42 @@ async function delMovimiento(movId) {
   catch(e) { toast('Error: ' + e.message); }
 }
 
+// ── Pagos a canales (La Nave, Cinco, WhatsApp) ──
+const CANAL_NAMES = { nave: 'La Nave', cinco: 'Cinco', wapp: 'WhatsApp' };
+
+async function registrarPagoCanal(canal) {
+  const inp = $(`pcan-${canal}-amt`);
+  const amt = parseFloat(inp?.value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const pago = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    canal,
+    amount: amt,
+    currency: 'USD',
+    cobro: 'efectivo',
+    amount_usd: amt,
+    date: todayStr(),
+    paid_at: new Date().toISOString(),
+    paid_by: currentUser ? currentUser.id : 'admin',
+  };
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`pagos_canal/${canal}/${pago.id}`).set(pago);
+    toast(`Pago a ${CANAL_NAMES[canal]}: $${amt} USD efectivo`);
+    if (inp) inp.value = '';
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function delPagoCanal(canal, pagoId) {
+  if (!confirm('¿Eliminar este pago?')) return;
+  try {
+    await fbRef.ref(`pagos_canal/${canal}/${pagoId}`).remove();
+    toast('Pago eliminado');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
 // ── Cálculo de la matriz de saldos ──
 function emptyMatriz() {
   return {
@@ -3157,32 +3374,128 @@ async function loadCaja() {
   const movs  = movsAll.filter(range.filter);
 
   // ─── Construcción de la matriz ───
-  // 1) Punto de partida: saldo inicial (siempre, no depende del rango)
+  // Modelo: a caja entra el TOTAL recibido del cliente (amount+tip) en su
+  // moneda y forma originales. Las comisiones de canal NO se descuentan
+  // en este punto — se acumulan como deuda con el canal en USD y se
+  // descuentan solo cuando admin paga al canal (egreso explícito).
+  // Salario y propinas son egresos cuando admin los paga.
+
+  // 1) Saldo inicial (siempre, no depende del rango)
   const matriz = emptyMatriz();
   ['CUP','USD','EUR'].forEach(c => {
     matriz[c].efectivo      = saldo[c].efectivo      || 0;
     matriz[c].transferencia = saldo[c].transferencia || 0;
   });
 
-  // 2) Ingresos por carrera del período: 85% (o lo que quede sin salario) del NETO,
-  //    en la moneda y forma de la carrera. Mantenemos denominaciones.
+  // 2) Ingresos por carrera: TOTAL recibido del cliente = amount + tipAmount
+  //    en moneda y forma de la carrera (mantenemos denominaciones).
   trips.forEach(t => {
-    const ingreso = (t.netAmount || 0) * empresaPct;
-    aplicarATraza(matriz, t.currency, t.cobro, ingreso);
+    const total = (t.amount || 0) + (t.tipAmount || 0);
+    aplicarATraza(matriz, t.currency, t.cobro, total);
   });
 
-  // 3) Pagos a choferes (salario + propina): salen de caja en su moneda y forma.
-  //    Pagos viejos sin cobro se asumen efectivo.
+  // 3) Pagos a choferes (salario, propinas, bono trimestral): salen de
+  //    caja en su moneda y forma. Pagos viejos sin cobro se asumen
+  //    efectivo. Pagos viejos sin kind se asumen 'salario'.
   pagos.forEach(p => {
     const cobro = p.cobro || 'efectivo';
     aplicarATraza(matriz, p.currency, cobro, -(p.amount || 0));
   });
 
-  // 4) Movimientos manuales
+  // 4) Pagos a canales (La Nave, Cinco, WhatsApp): salen siempre de
+  //    USD efectivo (regla del negocio). Storage: /pagos_canal/{canal}/{id}.
+  let pagosCanalAll = [];
+  if (fbRef && isOnline) {
+    try {
+      const snap = await fbRef.ref('pagos_canal').once('value');
+      const v = snap.val() || {};
+      Object.values(v).forEach(byCanal => {
+        Object.values(byCanal || {}).forEach(p => { if (p && typeof p === 'object') pagosCanalAll.push(p); });
+      });
+    } catch(e) {}
+  }
+  const pagosCanal = pagosCanalAll.filter(range.filter);
+  pagosCanal.forEach(pc => {
+    aplicarATraza(matriz, 'USD', 'efectivo', -(pc.amount_usd || 0));
+  });
+
+  // 5) Movimientos manuales (gastos / ingresos extras)
   movs.forEach(m => {
     const sign = m.tipo === 'gasto' ? -1 : 1;
     aplicarATraza(matriz, m.currency, m.cobro, sign * (m.amount || 0));
   });
+
+  // ─── Comisiones acumuladas por canal (USD canónico) ───
+  // Acumulado: suma de commAmount_usd de carreras del periodo, agrupadas por source.
+  // Pagado: suma de pagos a canal del periodo, agrupados por canal.
+  const comisionAcum = { nave: 0, cinco: 0, wapp: 0 };
+  trips.forEach(t => {
+    const canal = t.source;
+    if (!CANAL_NAMES[canal]) return; // 'directo' no genera deuda
+    let commUsd = (typeof t.commAmount_usd === 'number') ? t.commAmount_usd : null;
+    if (commUsd === null) {
+      // Fallback: convertir on-the-fly si no hay congelado
+      if ((t.currency || 'CUP').toUpperCase() === 'USD') commUsd = t.commAmount || 0;
+      else if (fxCache) {
+        const v = convertToUsd(t.commAmount || 0, t.currency || 'CUP');
+        commUsd = v ? v.usd : 0;
+      } else { commUsd = 0; }
+    }
+    comisionAcum[canal] += commUsd;
+  });
+  const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
+  pagosCanal.forEach(pc => {
+    if (CANAL_NAMES[pc.canal]) pagadoCanal[pc.canal] += (pc.amount_usd || pc.amount || 0);
+  });
+
+  // ─── Render comisiones por canal ───
+  const canalesEl = $('caja-canales-list');
+  if (canalesEl) {
+    const fmtU = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
+    canalesEl.innerHTML = ['nave','cinco','wapp'].map(canal => {
+      const acum = comisionAcum[canal];
+      const pag  = pagadoCanal[canal];
+      const pend = acum - pag;
+      const pendCol = pend > 0 ? 'var(--re)' : (pend < 0 ? 'var(--am)' : 'var(--txt2)');
+      const cName = CANAL_NAMES[canal];
+      const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal).sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
+      const pagosHTML = pagosDeEsteCanal.length
+        ? pagosDeEsteCanal.map(p => {
+            const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
+            const hora  = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
+              <span style="color:var(--txt2)">${fecha} ${hora ? '· ' + hora : ''}</span>
+              <span style="font-weight:500">$${Math.round(p.amount).toLocaleString('es')} USD</span>
+              <button onclick="delPagoCanal('${canal}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:1px 5px">✕</button>
+            </div>`;
+          }).join('')
+        : '<div style="color:var(--txt3);padding:5px 0;font-size:11px">Sin pagos en este período.</div>';
+      return `
+        <div class="card" style="margin-bottom:8px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <strong style="color:var(--txt)">${cName}</strong>
+            <span style="font-size:11px;color:var(--txt3)">${acum > 0 || pag > 0 ? `${pagosDeEsteCanal.length} pago${pagosDeEsteCanal.length===1?'':'s'}` : ''}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+            <span>Acumulado:</span><span style="font-weight:500">${fmtU(acum)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+            <span>Pagado:</span><span style="color:var(--re);font-weight:500">${pag ? '-' + fmtU(pag) : '—'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--brd);font-weight:600">
+            <span>Pendiente:</span><span style="color:${pendCol}">${pend >= 0 ? fmtU(pend) : '-' + fmtU(Math.abs(pend))}</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+            <input type="number" id="pcan-${canal}-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:7px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+            <span style="font-size:11px;color:var(--txt3)">USD efectivo</span>
+            <button class="btn btnacc" onclick="registrarPagoCanal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">Pagar</button>
+          </div>
+          <div style="margin-top:8px">
+            ${pagosHTML}
+          </div>
+        </div>`;
+    }).join('');
+  }
 
   // ─── Render saldo ───
   const tb = $('caja-saldo-tbody');
@@ -3512,6 +3825,7 @@ async function init() {
   // Cargar tipo de cambio (cache local primero, luego refresca de Firebase si hay red)
   loadFxCacheLocal();
   loadLatestFxRates(); // dispara fetch en background
+  syncSinPercancesFromFirebase(); // estado de bono trimestral por chofer
 
   // Limpiezas silenciosas: drivers duplicados + URL Traccar vieja
   cleanupDuplicateDrivers();
