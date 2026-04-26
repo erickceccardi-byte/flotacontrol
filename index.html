@@ -680,12 +680,6 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="det-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-4px;margin-bottom:8px;text-align:center"></div>
 
-      <div class="sh">Propinas del período</div>
-      <div class="card" style="display:flex;justify-content:space-between;align-items:center;background:var(--gbg);border-color:var(--gbrd);padding:10px 14px">
-        <span style="font-size:12px;color:var(--g);font-weight:500">Total propinas (no entran en bruto/neto)</span>
-        <span id="det-tip" style="font-size:16px;font-weight:600;color:var(--g)">—</span>
-      </div>
-
       <div class="sh">Salario y pagos <span id="det-salary-pct-lbl" style="color:var(--txt3);font-weight:400;font-size:11px">(15% del neto)</span></div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
@@ -711,7 +705,7 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
-          <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago al chofer</div>
+          <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de salario</div>
           <div style="display:flex;gap:6px;align-items:center">
             <input type="number" id="det-pago-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
             <select id="det-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
@@ -719,13 +713,56 @@ audio{width:100%;height:36px;margin-top:6px}
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
             </select>
-            <button class="btn btnacc" onclick="registrarPago()" style="white-space:nowrap">Pagar</button>
+            <button class="btn btnacc" onclick="registrarPago('salario')" style="white-space:nowrap">Pagar</button>
           </div>
         </div>
 
         <div style="margin-top:12px">
-          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos del período</div>
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de salario del período</div>
           <div id="det-pagos-list" style="font-size:12px"></div>
+        </div>
+      </div>
+
+      <div class="sh">Propinas y pagos</div>
+      <div class="card" style="background:#f7faf2;border-color:var(--gbrd)">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+          <span>Propinas acumuladas:</span>
+          <span style="text-align:right">
+            <span id="det-tip-usd" style="font-weight:600;color:var(--g)">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-tip-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
+          <span>Pagado en el período:</span>
+          <span style="text-align:right">
+            <span id="det-tip-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
+            <span style="font-size:11px;color:var(--txt3)" id="det-tip-pagado-cup"></span>
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0 4px;font-size:14px;border-top:2px solid var(--txt2);font-weight:600">
+          <span>Pendiente:</span>
+          <span style="text-align:right">
+            <span id="det-tip-pendiente-usd" style="color:var(--g)">—</span>
+            <span style="font-size:11px;color:var(--txt3);font-weight:400" id="det-tip-pendiente-cup"></span>
+          </span>
+        </div>
+
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
+          <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de propinas</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="det-tip-pago-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:8px 12px;border:1px solid var(--brd);border-radius:8px;font-size:14px;font-family:inherit;outline:none">
+            <select id="det-tip-pago-cur" style="padding:8px 8px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit;cursor:pointer;background:var(--bg)">
+              <option value="CUP">CUP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+            <button class="btn btnacc" onclick="registrarPago('propina')" style="white-space:nowrap">Pagar</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de propinas del período</div>
+          <div id="det-tip-pagos-list" style="font-size:12px"></div>
         </div>
       </div>
 
@@ -1378,13 +1415,18 @@ async function saveSalaryPct() {
   if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${v}% del neto)`;
 }
 
-async function registrarPago() {
+async function registrarPago(kind) {
+  // kind: 'salario' | 'propina'  (default 'salario' si no se pasa)
+  kind = kind === 'propina' ? 'propina' : 'salario';
+  const inputId = kind === 'propina' ? 'det-tip-pago-amt' : 'det-pago-amt';
+  const curId   = kind === 'propina' ? 'det-tip-pago-cur' : 'det-pago-cur';
+
   const sel = $('det-driver');
   if (!sel || !sel.value) { toast('Selecciona un chofer primero'); return; }
   const driverId = sel.value;
-  const amt = parseFloat($('det-pago-amt').value);
+  const amt = parseFloat($(inputId).value);
   if (!amt || amt <= 0) { toast('Monto del pago inválido'); return; }
-  const currency = $('det-pago-cur').value || 'CUP';
+  const currency = $(curId).value || 'CUP';
 
   if (!fxCache) {
     if (!confirm('No hay tasa de cambio fijada. El pago se guardará pero no se podrá convertir a USD para el cálculo de pendiente. ¿Continuar?')) return;
@@ -1394,6 +1436,7 @@ async function registrarPago() {
   const pago = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     driverId,
+    kind, // 'salario' o 'propina' — pagos viejos sin kind se asumen 'salario'
     amount: amt,
     currency,
     amount_usd: usd ? usd.usd : (currency === 'USD' ? amt : null),
@@ -1410,9 +1453,10 @@ async function registrarPago() {
   }
   try {
     await fbRef.ref(`pagos/${driverId}/${pago.id}`).set(pago);
-    toast(`Pago registrado: ${Math.round(amt).toLocaleString('es')} ${currency}`);
-    $('det-pago-amt').value = '';
-    loadDetalle(); // refresca todo el detalle
+    const lbl = kind === 'propina' ? 'propinas' : 'salario';
+    toast(`Pago de ${lbl}: ${Math.round(amt).toLocaleString('es')} ${currency}`);
+    $(inputId).value = '';
+    loadDetalle();
   } catch(e) {
     toast('Error guardando pago: ' + e.message);
   }
@@ -1696,8 +1740,6 @@ async function loadDetalle() {
   $('det-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
   $('det-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
   $('det-carr').textContent  = trips.length || '—';
-  if ($('det-tip')) $('det-tip').textContent = tipUsd ? fmtUsd(tipUsd) : '—';
-
   // Nota tasa
   const fxNote = $('det-fx-note');
   const cupRate = fxCache ? (fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : null)) : null;
@@ -1709,59 +1751,87 @@ async function loadDetalle() {
     }
   }
 
-  // ─── Salario y pagos ───
+  // ─── Pagos del chofer (split por kind: salario / propina) ───
+  // Pagos viejos sin kind se asumen 'salario' por retro-compatibilidad.
+  const allPagos = await fetchPagosForDriver(driverId);
+  const pagosPeriodo = allPagos.filter(p => range.dates.includes(p.date));
+  const pagosSalario = pagosPeriodo.filter(p => (p.kind || 'salario') === 'salario');
+  const pagosPropina = pagosPeriodo.filter(p => p.kind === 'propina');
+
+  function sumarPagosUsd(pagos) {
+    return pagos.reduce((s, p) => {
+      if (typeof p.amount_usd === 'number') return s + p.amount_usd;
+      if (fxCache) {
+        const c = convertToUsd(p.amount || 0, p.currency || 'CUP');
+        if (c) return s + c.usd;
+      }
+      return s;
+    }, 0);
+  }
+
+  // ── Salario ──
   const salaryPct = getSalaryPercent();
   if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${salaryPct}% del neto)`;
   const salarioUsd = netoUsd * (salaryPct / 100);
   const salarioCup = (cupRate && salarioUsd) ? Math.round(salarioUsd * cupRate) : null;
-
-  // Traer pagos del chofer y filtrar por la ventana del periodo
-  const allPagos = await fetchPagosForDriver(driverId);
-  const pagosPeriodo = allPagos.filter(p => range.dates.includes(p.date));
-  const pagadoUsd = pagosPeriodo.reduce((s,p) => {
-    if (typeof p.amount_usd === 'number') return s + p.amount_usd;
-    if (fxCache) {
-      const c = convertToUsd(p.amount || 0, p.currency || 'CUP');
-      if (c) return s + c.usd;
-    }
-    return s;
-  }, 0);
-  const pagadoCup = (cupRate && pagadoUsd) ? Math.round(pagadoUsd * cupRate) : null;
-  const pendienteUsd = salarioUsd - pagadoUsd;
-  const pendienteCup = (cupRate) ? Math.round(pendienteUsd * cupRate) : null;
+  const pagadoSalUsd = sumarPagosUsd(pagosSalario);
+  const pagadoSalCup = (cupRate && pagadoSalUsd) ? Math.round(pagadoSalUsd * cupRate) : null;
+  const pendienteSalUsd = salarioUsd - pagadoSalUsd;
+  const pendienteSalCup = cupRate ? Math.round(pendienteSalUsd * cupRate) : null;
 
   if ($('det-salario-usd')) $('det-salario-usd').textContent = salarioUsd ? fmtUsd(salarioUsd) : '—';
   if ($('det-salario-cup')) $('det-salario-cup').textContent = salarioCup ? `  ·  ${salarioCup.toLocaleString('es')} CUP` : '';
-  if ($('det-pagado-usd'))  $('det-pagado-usd').textContent  = pagadoUsd ? '-' + fmtUsd(pagadoUsd) : '—';
-  if ($('det-pagado-cup'))  $('det-pagado-cup').textContent  = pagadoCup ? `  ·  -${pagadoCup.toLocaleString('es')} CUP` : '';
-  const pendColor = pendienteUsd >= 0 ? 'var(--g)' : 'var(--re)';
+  if ($('det-pagado-usd'))  $('det-pagado-usd').textContent  = pagadoSalUsd ? '-' + fmtUsd(pagadoSalUsd) : '—';
+  if ($('det-pagado-cup'))  $('det-pagado-cup').textContent  = pagadoSalCup ? `  ·  -${pagadoSalCup.toLocaleString('es')} CUP` : '';
   if ($('det-pendiente-usd')) {
-    $('det-pendiente-usd').textContent = pendienteUsd ? (pendienteUsd >= 0 ? fmtUsd(pendienteUsd) : '-' + fmtUsd(Math.abs(pendienteUsd))) : (salarioUsd ? '$0.00' : '—');
-    $('det-pendiente-usd').style.color = pendColor;
+    $('det-pendiente-usd').textContent = pendienteSalUsd ? (pendienteSalUsd >= 0 ? fmtUsd(pendienteSalUsd) : '-' + fmtUsd(Math.abs(pendienteSalUsd))) : (salarioUsd ? '$0.00' : '—');
+    $('det-pendiente-usd').style.color = pendienteSalUsd >= 0 ? 'var(--g)' : 'var(--re)';
   }
   if ($('det-pendiente-cup')) {
-    $('det-pendiente-cup').textContent = (cupRate && (salarioUsd || pagadoUsd)) ? `  ·  ${pendienteCup >= 0 ? '' : '-'}${Math.abs(pendienteCup).toLocaleString('es')} CUP` : '';
+    $('det-pendiente-cup').textContent = (cupRate && (salarioUsd || pagadoSalUsd)) ? `  ·  ${pendienteSalCup >= 0 ? '' : '-'}${Math.abs(pendienteSalCup).toLocaleString('es')} CUP` : '';
   }
 
-  // Lista de pagos del periodo
-  const pagosListEl = $('det-pagos-list');
-  if (pagosListEl) {
-    if (!pagosPeriodo.length) {
-      pagosListEl.innerHTML = '<div style="color:var(--txt3);padding:6px 0">Sin pagos registrados en este período.</div>';
-    } else {
-      const sorted = [...pagosPeriodo].sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
-      pagosListEl.innerHTML = sorted.map(p => {
-        const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
-        const hora = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
-        const usdEq = (typeof p.amount_usd === 'number' && p.currency !== 'USD') ? `  ≈ $${p.amount_usd.toFixed(2)}` : '';
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd)">
-          <span style="color:var(--txt2)">${fecha} ${hora ? '· ' + hora : ''}</span>
-          <span style="font-weight:500">${Math.round(p.amount).toLocaleString('es')} ${p.currency}<span style="color:var(--txt3);font-weight:400;font-size:11px">${usdEq}</span></span>
-          <button onclick="delPago('${driverId}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:2px 6px">✕</button>
-        </div>`;
-      }).join('');
-    }
+  // ── Propinas ──
+  const tipCup = (cupRate && tipUsd) ? Math.round(tipUsd * cupRate) : null;
+  const pagadoTipUsd = sumarPagosUsd(pagosPropina);
+  const pagadoTipCup = (cupRate && pagadoTipUsd) ? Math.round(pagadoTipUsd * cupRate) : null;
+  const pendienteTipUsd = tipUsd - pagadoTipUsd;
+  const pendienteTipCup = cupRate ? Math.round(pendienteTipUsd * cupRate) : null;
+
+  if ($('det-tip-usd'))      $('det-tip-usd').textContent      = tipUsd ? fmtUsd(tipUsd) : '—';
+  if ($('det-tip-cup'))      $('det-tip-cup').textContent      = tipCup ? `  ·  ${tipCup.toLocaleString('es')} CUP` : '';
+  if ($('det-tip-pagado-usd')) $('det-tip-pagado-usd').textContent = pagadoTipUsd ? '-' + fmtUsd(pagadoTipUsd) : '—';
+  if ($('det-tip-pagado-cup')) $('det-tip-pagado-cup').textContent = pagadoTipCup ? `  ·  -${pagadoTipCup.toLocaleString('es')} CUP` : '';
+  if ($('det-tip-pendiente-usd')) {
+    $('det-tip-pendiente-usd').textContent = pendienteTipUsd ? (pendienteTipUsd >= 0 ? fmtUsd(pendienteTipUsd) : '-' + fmtUsd(Math.abs(pendienteTipUsd))) : (tipUsd ? '$0.00' : '—');
+    $('det-tip-pendiente-usd').style.color = pendienteTipUsd >= 0 ? 'var(--g)' : 'var(--re)';
   }
+  if ($('det-tip-pendiente-cup')) {
+    $('det-tip-pendiente-cup').textContent = (cupRate && (tipUsd || pagadoTipUsd)) ? `  ·  ${pendienteTipCup >= 0 ? '' : '-'}${Math.abs(pendienteTipCup).toLocaleString('es')} CUP` : '';
+  }
+
+  // Helper para renderizar lista de pagos
+  function renderPagosList(elId, pagos) {
+    const el = $(elId);
+    if (!el) return;
+    if (!pagos.length) {
+      el.innerHTML = '<div style="color:var(--txt3);padding:6px 0">Sin pagos en este período.</div>';
+      return;
+    }
+    const sorted = [...pagos].sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
+    el.innerHTML = sorted.map(p => {
+      const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
+      const hora = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
+      const usdEq = (typeof p.amount_usd === 'number' && p.currency !== 'USD') ? `  ≈ $${p.amount_usd.toFixed(2)}` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd)">
+        <span style="color:var(--txt2)">${fecha} ${hora ? '· ' + hora : ''}</span>
+        <span style="font-weight:500">${Math.round(p.amount).toLocaleString('es')} ${p.currency}<span style="color:var(--txt3);font-weight:400;font-size:11px">${usdEq}</span></span>
+        <button onclick="delPago('${driverId}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:2px 6px">✕</button>
+      </div>`;
+    }).join('');
+  }
+  renderPagosList('det-pagos-list', pagosSalario);
+  renderPagosList('det-tip-pagos-list', pagosPropina);
 
   // Desglose por moneda × forma de pago
   const breakdown = {};
