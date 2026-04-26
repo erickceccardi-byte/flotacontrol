@@ -1064,15 +1064,13 @@ audio{width:100%;height:36px;margin-top:6px}
         <button class="btn" onclick="saveGPSMap()" style="margin-top:10px">Guardar mapeo</button>
       </div>
 
-      <div class="sh">Sincronización Firebase (opcional)</div>
+      <div class="sh">Sincronización en la nube</div>
       <div class="card">
-        <div class="alert b" style="margin-bottom:10px">Firebase sincroniza los datos entre todos los teléfonos automáticamente, incluso con internet intermitente.</div>
-        <div class="field"><label>API Key</label><input type="text" id="fb-key" placeholder="AIzaSy..."></div>
-        <div class="field"><label>Database URL</label><input type="url" id="fb-url" placeholder="https://tu-proyecto.firebaseio.com"></div>
-        <div class="field"><label>Project ID</label><input type="text" id="fb-proj" placeholder="tu-proyecto"></div>
-        <button class="btn btnacc" onclick="saveFirebase()">Conectar Firebase</button>
-        <div id="fb-msg"></div>
-        <div style="margin-top:10px;font-size:11px;color:var(--txt3)">Sin Firebase la app funciona localmente. Los datos se exportan manualmente por chofer.</div>
+        <div class="alert g" style="margin-bottom:10px">
+          ✓ Conectado a <strong>ecocargo.app</strong> (PocketBase auto-hospedado).<br>
+          Los datos se sincronizan entre todos los dispositivos en tiempo real.
+        </div>
+        <div style="font-size:11px;color:var(--txt3)">Si no hay internet, las carreras quedan en la cola local del chofer y suben automáticamente al volver la conexión.</div>
       </div>
 
       <div class="sh">Exportar datos</div>
@@ -1088,7 +1086,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="sh">Mantenimiento</div>
       <div class="card">
         <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
-          Si alguna carrera quedó sin equivalente USD congelado (porque el chofer no tenía la tasa cargada al registrarla), este botón recorre todas las carreras de Firebase y completa los campos USD usando la tasa del día (o la más cercana disponible).
+          Si alguna carrera quedó sin equivalente USD congelado (porque el chofer no tenía la tasa cargada al registrarla), este botón recorre todas las carreras y completa los campos USD usando la tasa del día (o la más cercana disponible).
         </div>
         <button class="btn btnacc" onclick="recalcularUsdFaltantes()">Recalcular conversiones USD faltantes</button>
         <div id="recalc-msg" style="font-size:11px;margin-top:8px"></div>
@@ -1154,7 +1152,7 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
-<!-- Firebase CDN (optional, loaded dynamically) -->
+<!-- PocketBase backend: ecocargo.app (no SDK externa, fetch puro) -->
 <script>
 // ════════════════════════════════════════
 // CONFIG & STORAGE
@@ -1192,7 +1190,7 @@ let currentUser = null;
 let selCan = null, selCobroType = null;
 let idbDB = null;
 let isOnline = navigator.onLine;
-let fbRef = null; // Firebase database reference
+let fbRef = null; // PocketBase polyfill (mantiene API tipo Firebase)
 let mediaRec = null, audioChunks = [], recTimer = null, recSecs = 0;
 let currentAudioB64 = null;
 let tcDevices = [], tcConn = false;
@@ -1303,40 +1301,203 @@ async function dbGetUnsynced() {
 }
 
 // ════════════════════════════════════════
-// FIREBASE SYNC
+// POCKETBASE SYNC (reemplazo a Firebase, mismo API: fbRef.ref(path).X())
 // ════════════════════════════════════════
-async function initFirebase() {
-  const cfg = getCfg();
-  if (!cfg.firebase || !cfg.firebase.apiKey) return;
-  try {
-    if (typeof firebase === 'undefined') {
-      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js');
-    }
-    if (!firebase.apps.length) {
-      firebase.initializeApp({
-        apiKey: cfg.firebase.apiKey,
-        databaseURL: cfg.firebase.databaseURL,
-        projectId: cfg.firebase.projectId
-      });
-    }
-    fbRef = firebase.database();
-    // Enable offline persistence
-    firebase.database().ref('.info/connected').on('value', snap => {
-      isOnline = snap.val() === true;
-      updateOnlineUI();
-    });
-    console.log('Firebase ready');
-    await syncPending();
-  } catch(e) { console.warn('Firebase failed:', e); }
+// PocketBase está en ecocargo.app — colecciones públicas (open API).
+// El polyfill PBPath traduce las rutas anidadas de Firebase
+// (ej. trips/2026-04-26/abc123) a una colección plana con filtros.
+const PB_URL = 'https://ecocargo.app';
+
+// Mapa: top-level Firebase path → colección PocketBase + claves del path
+const PB_PATHS = {
+  trips:        { coll: 'trips',        keys: ['date',     'trip_id'] },
+  pagos:        { coll: 'pagos',        keys: ['driverId', 'pago_id'] },
+  pagos_canal:  { coll: 'pagos_canal',  keys: ['canal',    'pago_id'] },
+  movimientos:  { coll: 'movimientos',  keys: ['mov_id'] },
+  tipo_cambio:  { coll: 'tipo_cambio',  keys: ['fecha'] },
+  driver_state: { coll: 'driver_state', keys: ['driverId'] },
+  // 'caja/saldo_inicial' es un singleton manejado aparte
+};
+
+async function pbReq(path, opts = {}) {
+  const r = await fetch(PB_URL + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error('PB ' + r.status + ': ' + t.substring(0, 200));
+  }
+  return r.status === 204 ? null : r.json();
 }
 
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src; s.onload = res; s.onerror = rej;
-    document.head.appendChild(s);
+function pbFilter(filters) {
+  return filters.map(([k, v]) => k + "='" + String(v).replace(/'/g, "\\'") + "'").join(' && ');
+}
+
+async function pbList(coll, filters, opts = {}) {
+  const out = [];
+  let page = 1;
+  const perPage = opts.perPage || 500;
+  while (true) {
+    const params = new URLSearchParams({ page: String(page), perPage: String(perPage) });
+    if (filters && filters.length) params.set('filter', pbFilter(filters));
+    if (opts.sort) params.set('sort', opts.sort);
+    const r = await pbReq('/api/collections/' + coll + '/records?' + params.toString());
+    out.push(...(r.items || []));
+    if (!r.totalPages || page >= r.totalPages || (opts.maxItems && out.length >= opts.maxItems)) break;
+    page++;
+  }
+  return out;
+}
+
+async function pbFindOne(coll, filters) {
+  const items = await pbList(coll, filters, { perPage: 1, maxItems: 1 });
+  return items[0] || null;
+}
+
+async function pbCreate(coll, record) {
+  return pbReq('/api/collections/' + coll + '/records', {
+    method: 'POST', body: JSON.stringify(record)
   });
+}
+async function pbPatch(coll, id, record) {
+  return pbReq('/api/collections/' + coll + '/records/' + id, {
+    method: 'PATCH', body: JSON.stringify(record)
+  });
+}
+async function pbDelete(coll, id) {
+  return pbReq('/api/collections/' + coll + '/records/' + id, { method: 'DELETE' });
+}
+
+async function pbUpsert(coll, filters, data) {
+  const existing = await pbFindOne(coll, filters);
+  const payload = { ...data };
+  filters.forEach(([k, v]) => { if (payload[k] == null) payload[k] = v; });
+  if (existing) return pbPatch(coll, existing.id, payload);
+  return pbCreate(coll, payload);
+}
+
+function pbStripMeta(rec) {
+  if (!rec) return rec;
+  const { id, created, updated, collectionId, collectionName, ...rest } = rec;
+  return rest;
+}
+
+class PBPath {
+  constructor(path) { this.path = (path || '').replace(/^\/+|\/+$/g, ''); this._sortKey = null; this._limitLast = null; }
+
+  // chained — fluent API
+  orderByKey()     { this._sortKey = true; return this; }
+  limitToLast(n)   { this._limitLast = n;  return this; }
+
+  _parse() {
+    const parts = this.path.split('/');
+    const top = parts[0];
+    if (top === 'caja' && parts[1] === 'saldo_inicial') {
+      return { coll: 'caja_inicial', filters: [['singleton_key','main']], keys: ['singleton_key'], fieldPath: parts.slice(2), singleton: true };
+    }
+    const map = PB_PATHS[top];
+    if (!map) throw new Error('PB unknown path: ' + this.path);
+    const filters = [];
+    for (let i = 0; i < map.keys.length && i + 1 < parts.length; i++) {
+      filters.push([map.keys[i], parts[i + 1]]);
+    }
+    return {
+      coll: map.coll, filters, keys: map.keys,
+      fieldPath: parts.slice(1 + map.keys.length),
+      singleton: false,
+    };
+  }
+
+  async once(_evt) {
+    const p = this._parse();
+    if (p.singleton || p.filters.length === p.keys.length) {
+      let val = pbStripMeta(await pbFindOne(p.coll, p.filters));
+      for (const f of p.fieldPath) { val = val ? val[f] : null; if (val == null) break; }
+      return { val: () => (val == null ? null : val) };
+    }
+    // Listado: armamos objeto anidado con las claves restantes
+    const opts = {};
+    if (this._limitLast)      { opts.sort = '-' + p.keys[p.filters.length]; opts.maxItems = this._limitLast; opts.perPage = this._limitLast; }
+    else if (this._sortKey)   { opts.sort = '+' + p.keys[p.filters.length]; }
+    let items = await pbList(p.coll, p.filters, opts);
+    if (this._limitLast) items = items.slice(0, this._limitLast).reverse();
+    const remaining = p.keys.slice(p.filters.length);
+    const out = {};
+    for (const it of items) {
+      let cur = out;
+      for (let i = 0; i < remaining.length - 1; i++) {
+        const k = it[remaining[i]];
+        cur[k] = cur[k] || {};
+        cur = cur[k];
+      }
+      const lastK = it[remaining[remaining.length - 1]];
+      cur[lastK] = pbStripMeta(it);
+    }
+    return { val: () => (Object.keys(out).length ? out : null) };
+  }
+
+  async set(data) {
+    const p = this._parse();
+    if (p.singleton || p.filters.length === p.keys.length) {
+      if (p.fieldPath.length) {
+        // Field-path write: leemos el objeto, modificamos campo, upsert
+        const existing = pbStripMeta(await pbFindOne(p.coll, p.filters)) || {};
+        let cur = existing;
+        for (let i = 0; i < p.fieldPath.length - 1; i++) {
+          cur[p.fieldPath[i]] = cur[p.fieldPath[i]] || {};
+          cur = cur[p.fieldPath[i]];
+        }
+        cur[p.fieldPath[p.fieldPath.length - 1]] = data;
+        return pbUpsert(p.coll, p.filters, existing);
+      }
+      return pbUpsert(p.coll, p.filters, data);
+    }
+    throw new Error('PB set on collection path not supported: ' + this.path);
+  }
+
+  async update(partial) {
+    const p = this._parse();
+    if (p.singleton || p.filters.length === p.keys.length) {
+      const existing = await pbFindOne(p.coll, p.filters);
+      if (!existing) return pbUpsert(p.coll, p.filters, partial);
+      return pbPatch(p.coll, existing.id, partial);
+    }
+    throw new Error('PB update on collection path not supported: ' + this.path);
+  }
+
+  async remove() {
+    const p = this._parse();
+    if (p.singleton || p.filters.length === p.keys.length) {
+      const existing = await pbFindOne(p.coll, p.filters);
+      if (existing) return pbDelete(p.coll, existing.id);
+      return;
+    }
+    // Bulk: borra todas las filas que matchean filters parciales
+    const items = await pbList(p.coll, p.filters);
+    for (const it of items) await pbDelete(p.coll, it.id);
+  }
+
+  on(event, cb) {
+    // Solo se usa para .info/connected — usamos navigator.onLine
+    if (this.path === '.info/connected') {
+      cb({ val: () => navigator.onLine });
+      window.addEventListener('online',  () => cb({ val: () => true  }));
+      window.addEventListener('offline', () => cb({ val: () => false }));
+    }
+  }
+}
+
+const _PB_FBREF = { ref: (path) => new PBPath(path) };
+
+async function initFirebase() {
+  // Conserva el nombre por compatibilidad con el resto del código.
+  // Apunta a PocketBase en ecocargo.app (colecciones públicas, sin token).
+  fbRef = _PB_FBREF;
+  isOnline = navigator.onLine;
+  console.log('PocketBase ready @ ' + PB_URL);
+  try { await syncPending(); } catch(e) {}
 }
 
 async function syncPending() {
@@ -1345,11 +1506,10 @@ async function syncPending() {
   for (const trip of pending) {
     try {
       const stripped = { ...trip };
-      // Limit audio size for Firebase (max 10MB per node)
       if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
       await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
       await dbSaveTrip({ ...trip, synced: 1 });
-    } catch(e) { console.warn('Sync failed for', trip.id); }
+    } catch(e) { console.warn('Sync failed for', trip.id, e); }
   }
   updateOnlineUI();
 }
@@ -1361,7 +1521,7 @@ async function pushTrip(trip) {
     if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
     await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
     return true;
-  } catch(e) { return false; }
+  } catch(e) { console.warn('pushTrip failed', e); return false; }
 }
 
 // ════════════════════════════════════════
@@ -2860,11 +3020,6 @@ function loadConfigUI() {
   $('cfg-wapp').value  = cfg.commissions?.wapp  || 10;
   if ($('cfg-salary-pct')) $('cfg-salary-pct').value = getSalaryPercent();
   if ($('cfg-bonus-pct'))  $('cfg-bonus-pct').value  = getBonusPercent();
-  if (cfg.firebase) {
-    $('fb-key').value  = cfg.firebase.apiKey    || '';
-    $('fb-url').value  = cfg.firebase.databaseURL || '';
-    $('fb-proj').value = cfg.firebase.projectId  || '';
-  }
   const today = todayStr();
   try { $('exp-date').value = today; } catch(e) {}
 }
@@ -2885,18 +3040,8 @@ function changeAdminPass() {
   toast('Contraseña actualizada');
 }
 
-async function saveFirebase() {
-  const apiKey = $('fb-key').value.trim();
-  const dbURL  = $('fb-url').value.trim();
-  const projId = $('fb-proj').value.trim();
-  if (!apiKey || !dbURL) { $('fb-msg').innerHTML = '<div class="alert r" style="margin-top:8px">Ingresa API Key y Database URL</div>'; return; }
-  const cfg = getCfg();
-  cfg.firebase = { apiKey, databaseURL: dbURL, projectId: projId };
-  setCfg(cfg);
-  await initFirebase();
-  $('fb-msg').innerHTML = '<div class="alert g" style="margin-top:8px">Firebase configurado. Sincronizando...</div>';
-  setTimeout(() => { $('fb-msg').innerHTML = ''; }, 4000);
-}
+// Conservada como no-op: la sincronización va por PocketBase (ecocargo.app).
+async function saveFirebase() { toast('Backend ya configurado: ecocargo.app'); }
 
 // ════════════════════════════════════════
 // EXPORT / IMPORT
@@ -3431,7 +3576,7 @@ async function delPagoCanal(canal, pagoId) {
 async function recalcularUsdFaltantes() {
   if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
   const msgEl = $('recalc-msg');
-  if (!confirm('Esto recorrerá TODAS las carreras de Firebase y completará los campos USD que falten usando la tasa del día (o la más cercana). No modifica las que ya tienen USD congelado.\n\n¿Continuar?')) return;
+  if (!confirm('Esto recorrerá TODAS las carreras y completará los campos USD que falten usando la tasa del día (o la más cercana). No modifica las que ya tienen USD congelado.\n\n¿Continuar?')) return;
 
   if (msgEl) msgEl.innerHTML = '<span style="color:var(--bl)">⏳ Procesando…</span>';
 
@@ -3442,7 +3587,7 @@ async function recalcularUsdFaltantes() {
     const sortedFxDates = Object.keys(fxByDate).sort();
 
     if (!sortedFxDates.length) {
-      if (msgEl) msgEl.innerHTML = '<span style="color:var(--re)">⚠ No hay tasas guardadas en Firebase. Fija una tasa primero.</span>';
+      if (msgEl) msgEl.innerHTML = '<span style="color:var(--re)">⚠ No hay tasas guardadas. Fija una tasa primero.</span>';
       return;
     }
 
@@ -4057,17 +4202,15 @@ async function init() {
 }
 
 
-  // ══ AUTO-FIREBASE CONFIG ══
-  const AUTO_FB = {"apiKey": "AIzaSyAot4WmR3n1PvmuSfsnjmC9VxbTdjmDzaE", "databaseURL": "https://flotacontrol-e9078-default-rtdb.firebaseio.com", "projectId": "flotacontrol-e9078"};
+  // ══ AUTO-CONFIG ══
   const AUTO_DRIVERS = [{"id": "d002", "name": "Ariel", "username": "ariel", "password": "2202"}, {"id": "d003", "name": "Amaury", "username": "amaury", "password": "0030"}, {"id": "d005", "name": "Yoan", "username": "yoan", "password": "4477"}];
-  
-  // Pre-load firebase config
+
+  // Backend: PocketBase en ecocargo.app (hardcoded en initFirebase()).
+  // Limpiamos cualquier config Firebase vieja que haya quedado en localStorage.
   const existingCfg = getCfg();
-  if (!existingCfg.firebase) {
-    existingCfg.firebase = AUTO_FB;
-    setCfg(existingCfg);
-  }
-  // Pre-load drivers if empty
+  if (existingCfg.firebase) { delete existingCfg.firebase; setCfg(existingCfg); }
+
+  // Pre-cargar choferes si están vacíos
   if (!getDrivers().length) {
     localStorage.setItem('fc_drivers', JSON.stringify(AUTO_DRIVERS));
   }
