@@ -266,9 +266,9 @@ audio{width:100%;height:36px;margin-top:6px}
 }
 
 /* Botones del selector de período en pestaña Detalle / Caja */
-.det-period-btn,.caja-period-btn{background:transparent;border:none;color:var(--txt2);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;min-height:32px;flex:1}
-.det-period-btn.active,.caja-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
-.det-period-btn:active,.caja-period-btn:active{transform:scale(.97)}
+.det-period-btn,.caja-period-btn,.resumen-period-btn{background:transparent;border:none;color:var(--txt2);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;min-height:32px;flex:1}
+.det-period-btn.active,.caja-period-btn.active,.resumen-period-btn.active{background:var(--bg);color:var(--txt);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.det-period-btn:active,.caja-period-btn:active,.resumen-period-btn:active{transform:scale(.97)}
 
 /* Total cobrado (opcional, para propina) */
 .d-tip-row{margin-top:6px}
@@ -605,12 +605,32 @@ audio{width:100%;height:36px;margin-top:6px}
 
     <!-- RESUMEN -->
     <div class="otab-pane active" id="atp-resumen">
-      <div class="date-row">
+      <!-- Selector de período: Día / Semana / Mes / Personalizado -->
+      <div style="display:flex;gap:4px;background:var(--bg2);border:1px solid var(--brd);border-radius:8px;padding:3px;margin-bottom:8px">
+        <button class="resumen-period-btn active" data-period="day"    onclick="setResumenPeriod('day')">Día</button>
+        <button class="resumen-period-btn"        data-period="week"   onclick="setResumenPeriod('week')">Semana</button>
+        <button class="resumen-period-btn"        data-period="month"  onclick="setResumenPeriod('month')">Mes</button>
+        <button class="resumen-period-btn"        data-period="custom" onclick="setResumenPeriod('custom')">Custom</button>
+      </div>
+
+      <!-- Día: un solo date picker -->
+      <div class="date-row" id="resumen-row-day">
         <input type="date" id="a-date">
         <button class="btn" onclick="loadResumen()">Ver</button>
       </div>
 
-      <div class="sh">Total del día (consolidado USD)</div>
+      <!-- Custom: rango desde-hasta -->
+      <div id="resumen-row-custom" style="display:none;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--txt2)">Desde</span>
+        <input type="date" id="a-date-from" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--brd);border-radius:8px">
+        <span style="font-size:12px;color:var(--txt2)">Hasta</span>
+        <input type="date" id="a-date-to" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--brd);border-radius:8px">
+        <button class="btn" onclick="loadResumen()">Ver</button>
+      </div>
+
+      <div id="a-period-label" style="font-size:11px;color:var(--txt3);margin-bottom:6px;text-align:center"></div>
+
+      <div class="sh">Total del período (consolidado USD)</div>
       <div class="sum-grid">
         <div class="sumc"><div class="sumv g" id="a-neto">—</div><div class="suml">Neto USD</div></div>
         <div class="sumc"><div class="sumv r" id="a-com">—</div><div class="suml">Comisión USD</div></div>
@@ -638,7 +658,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div id="a-drivers"></div>
 
       <div class="sh">Todas las carreras</div>
-      <div id="a-trips"><div style="font-size:13px;color:var(--txt3)">Selecciona una fecha.</div></div>
+      <div id="a-trips"><div style="font-size:13px;color:var(--txt3)">Selecciona un período.</div></div>
       <div class="spacer"></div>
     </div>
 
@@ -886,6 +906,14 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-saldo-total-usd" style="text-align:center;font-size:13px;color:var(--txt2);margin-top:10px;font-weight:500"></div>
       <div id="caja-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-2px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Libro de operaciones</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Todas las entradas y salidas del período en orden cronológico. Lista deslizable.
+      </div>
+      <div id="caja-libro" class="card" style="max-height:280px;overflow-y:auto;padding:0">
+        <div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin operaciones en este período.</div>
+      </div>
 
       <div class="sh">Comisiones por canal (USD)</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:8px">
@@ -2778,30 +2806,92 @@ function getTripUsd(trip, field) {
   return 0;
 }
 
+// Período activo del Resumen: 'day' | 'week' | 'month' | 'custom'.
+let resumenPeriod = 'day';
+
+function setResumenPeriod(p) {
+  resumenPeriod = p;
+  document.querySelectorAll('.resumen-period-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.period === p));
+  // Mostrar/ocultar inputs según el período
+  const rDay = $('resumen-row-day');
+  const rCustom = $('resumen-row-custom');
+  if (rDay)    rDay.style.display = (p === 'day') ? '' : 'none';
+  if (rCustom) rCustom.style.display = (p === 'custom') ? 'flex' : 'none';
+  // Preset razonable para custom (último 7 días)
+  if (p === 'custom') {
+    if (!$('a-date-from').value) {
+      const d = new Date(); d.setDate(d.getDate() - 6);
+      $('a-date-from').value = ymdLocal(d);
+    }
+    if (!$('a-date-to').value) $('a-date-to').value = todayStr();
+  }
+  loadResumen();
+}
+
+// Devuelve { dates: ['YYYY-MM-DD',...], label: 'descripción humana' }
+function getResumenRange() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (resumenPeriod === 'day') {
+    const d = $('a-date').value || todayStr();
+    if ($('a-date')) $('a-date').value = d;
+    const dt = new Date(d + 'T00:00:00');
+    const lab = dt.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    return { dates: [d], label: lab };
+  }
+  if (resumenPeriod === 'week' || resumenPeriod === 'month') {
+    const days = resumenPeriod === 'week' ? 7 : 30;
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const dd = new Date(today); dd.setDate(dd.getDate() - i);
+      dates.push(ymdLocal(dd));
+    }
+    return { dates, label: `Últimos ${days} días (${dates[dates.length-1]} → ${dates[0]})` };
+  }
+  // custom
+  const from = $('a-date-from').value;
+  const to = $('a-date-to').value;
+  if (!from || !to) return { dates: [todayStr()], label: 'Hoy (sin rango fijado)' };
+  const start = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  if (end < start) return { dates: [], label: '⚠ Rango inválido (hasta < desde)' };
+  const dates = [];
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(ymdLocal(d));
+  }
+  return { dates, label: `Del ${from} al ${to} (${dates.length} días)` };
+}
+
 async function loadResumen() {
-  const date = $('a-date').value || todayStr();
-  $('a-date').value = date;
+  const range = getResumenRange();
+  const dates = range.dates;
+  if ($('a-period-label')) $('a-period-label').textContent = range.label;
 
-  let trips = await dbGetTripsByDate(date);
-
-  // Si hay trips locales sin sincronizar, intentamos subirlos a PocketBase
-  // en background. Cubre el caso típico: el admin abre la PWA y ve trips
-  // que el chofer registró offline o que la sync inicial falló.
+  // Cargar trips de TODAS las fechas del rango: primero IDB, luego completar
+  // con PB para no perder nada. Trips locales sin sincronizar disparan un
+  // syncPending en background.
+  let trips = [];
+  for (const d of dates) {
+    try { trips = trips.concat(await dbGetTripsByDate(d)); } catch(e) {}
+  }
   if (fbRef && isOnline && trips.some(t => t.synced === 0)) {
     syncPending().catch(() => {});
   }
 
   if (fbRef && isOnline) {
-    try {
-      const snap = await fbRef.ref('trips/' + date).once('value');
-      if (snap.val()) {
-        const fbTrips = Object.values(snap.val());
-        const localIds = new Set(trips.map(t => t.id));
-        for (const ft of fbTrips) {
-          if (!localIds.has(ft.id)) { await dbSaveTrip({ ...ft, synced: 1 }); trips.push(ft); }
+    const localIds = new Set(trips.map(t => t.id));
+    const fbReads = await Promise.all(dates.map(d =>
+      fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({}))
+    ));
+    for (const day of fbReads) {
+      for (const ft of Object.values(day)) {
+        if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
+          try { await dbSaveTrip({ ...ft, synced: 1 }); } catch(e) {}
+          trips.push(ft);
+          localIds.add(ft.id);
         }
       }
-    } catch(e) {}
+    }
   }
 
   // ─── Total consolidado USD (cards superiores) ───
@@ -2872,7 +2962,8 @@ async function loadResumen() {
     if (!drv.byCur[cur]) drv.byCur[cur] = 0;
     drv.byCur[cur] += (r.amount || 0);
   });
-  const gDay = gpsCache[date] || {};
+  // GPS del rango: si es un solo día usar ese, si son varios, no mostrar km
+  const gDay = (dates.length === 1) ? (gpsCache[dates[0]] || {}) : {};
   $('a-drivers').innerHTML = Object.entries(byD).map(([id,d]) => {
     const [bg,col] = COLS[d.idx % COLS.length];
     const gps = Object.values(gDay).find(g => g.driverId === id) || null;
@@ -2896,7 +2987,10 @@ async function loadResumen() {
     </div>`;
   }).join('') || '<div style="font-size:13px;color:var(--txt3)">Sin datos.</div>';
 
-  const sorted = [...trips].sort((a,b) => b.time.localeCompare(a.time));
+  // Sort cronológico inverso (más reciente primero), funciona para multi-día
+  const sorted = [...trips].sort((a,b) =>
+    ((b.date||'') + ' ' + (b.time||'')).localeCompare((a.date||'') + ' ' + (a.time||''))
+  );
   $('a-trips').innerHTML = sorted.length ? sorted.map(r => tripHTML(r, true)).join('') : '<div style="font-size:13px;color:var(--txt3)">Sin carreras.</div>';
 }
 
@@ -3808,28 +3902,17 @@ async function loadCaja() {
   trips.forEach(t => {
     const canal = t.source;
     if (canal !== 'nave' && canal !== 'cinco' && canal !== 'wapp' && canal !== 'nave_billetera') return;
-    let commUsd = (typeof t.commAmount_usd === 'number') ? t.commAmount_usd : null;
-    if (commUsd === null) {
-      if ((t.currency || 'CUP').toUpperCase() === 'USD') commUsd = t.commAmount || 0;
-      else if (fxCache) {
-        const v = convertToUsd(t.commAmount || 0, t.currency || 'CUP');
-        commUsd = v ? v.usd : 0;
-      } else { commUsd = 0; }
-    }
+    // getTripUsd respeta el USD congelado si es válido (>0) y si no, convierte
+    // on-the-fly con fxCache. Esto cubre el caso de trips viejos guardados
+    // con commAmount_usd=0 cuando faltaba la tasa.
+    const commUsd = getTripUsd(t, 'commAmount');
     // Comisión acumulada — para nave_billetera va al bucket 'nave'
     const bucket = (canal === 'nave_billetera') ? 'nave' : canal;
     comisionAcum[bucket] += commUsd;
     // Si es billetera, el total cobrado entero (amount + propina si la hubo)
     // se cuenta como "pago anticipado" a La Nave (porque cobró directo).
     if (canal === 'nave_billetera') {
-      const total = (t.amount || 0) + (t.tipAmount || 0);
-      let totalUsd;
-      if ((t.currency || 'CUP').toUpperCase() === 'USD') totalUsd = total;
-      else if (fxCache) {
-        const v = convertToUsd(total, t.currency || 'CUP');
-        totalUsd = v ? v.usd : 0;
-      } else { totalUsd = 0; }
-      billeteraAutoPagado += totalUsd;
+      billeteraAutoPagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
     }
   });
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
@@ -3890,16 +3973,21 @@ async function loadCaja() {
   }
 
   // ─── Render saldo ───
+  // SIEMPRE muestra el saldo (incluso 0 o negativo). Antes 0 mostraba "—"
+  // y daba la impresión de que no había datos.
   const tb = $('caja-saldo-tbody');
   if (tb) {
-    const fmt = n => n ? Math.round(n).toLocaleString('es') : '—';
+    const fmt = n => Math.round(n).toLocaleString('es');
     tb.innerHTML = ['CUP','USD','EUR'].map(c => {
-      const e = matriz[c].efectivo, tr = matriz[c].transferencia, total = e + tr;
+      const e = matriz[c].efectivo || 0;
+      const tr = matriz[c].transferencia || 0;
+      const total = e + tr;
+      const totalCol = total < 0 ? 'var(--re)' : 'var(--txt)';
       return `<tr style="border-top:1px solid var(--brd)">
         <td style="padding:9px 10px;font-weight:600">${c}</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:500">${fmt(e)}</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:500">${fmt(tr)}</td>
-        <td style="padding:9px 10px;text-align:right;font-weight:700">${fmt(total)}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:500;${e<0?'color:var(--re)':''}">${fmt(e)}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:500;${tr<0?'color:var(--re)':''}">${fmt(tr)}</td>
+        <td style="padding:9px 10px;text-align:right;font-weight:700;color:${totalCol}">${fmt(total)}</td>
       </tr>`;
     }).join('');
   }
@@ -3955,8 +4043,106 @@ async function loadCaja() {
     }
   }
 
+  // ─── Libro de operaciones (todas las entradas y salidas) ───
+  // Junta trips + pagos + pagosCanal + movs en una sola lista cronológica.
+  renderCajaLibro(trips, pagos, pagosCanal, movs);
+
   // ─── Gráficos (lazy load Chart.js) ───
   await renderCajaCharts(trips, pagos, pagosCanal, movs, range, salaryPct);
+}
+
+// ── Libro de operaciones (entradas y salidas del período) ──
+// Lista cronológica reversa de TODO lo que afecta caja: ingresos por
+// carrera, egresos por pago de salario / propina / canal / movimientos
+// manuales. Renderizado en un div scrolleable.
+function renderCajaLibro(trips, pagos, pagosCanal, movs) {
+  const el = $('caja-libro');
+  if (!el) return;
+  const ops = [];
+
+  // Ingresos por carreras (excepto nave_billetera que no toca caja)
+  trips.forEach(t => {
+    if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
+    const monto = (t.amount || 0) + (t.tipAmount || 0);
+    if (!monto) return;
+    ops.push({
+      kind: 'in_trip',
+      date: t.date, time: t.time || '12:00',
+      title: `Carrera ${SRC[t.source] || t.source}`,
+      sub: `${t.driverName || '?'} · ${t.cobro || '?'}${t.tipAmount ? ' · propina ' + Math.round(t.tipAmount) : ''}`,
+      amount: monto, currency: t.currency || 'CUP', sign: '+',
+    });
+  });
+
+  // Egresos: pagos a choferes
+  pagos.forEach(p => {
+    if (!p.amount) return;
+    const drv = getDrivers().find(d => d.id === p.driverId);
+    const drvName = drv ? drv.name : p.driverId;
+    const kindLabel = p.kind === 'salario' ? 'Salario' : (p.kind === 'propina' ? 'Propina' : (p.kind === 'bono_trimestral' ? 'Bono' : p.kind));
+    ops.push({
+      kind: 'out_pago',
+      date: p.date, time: (p.paid_at || '').slice(11,16) || '12:00',
+      title: `${kindLabel} a ${drvName}`,
+      sub: p.cobro || 'efectivo',
+      amount: p.amount, currency: p.currency || 'CUP', sign: '-',
+    });
+  });
+
+  // Egresos: pagos a canales (siempre USD efectivo)
+  pagosCanal.forEach(pc => {
+    const monto = pc.amount_usd || pc.amount || 0;
+    if (!monto) return;
+    ops.push({
+      kind: 'out_canal',
+      date: pc.date, time: (pc.paid_at || '').slice(11,16) || '12:00',
+      title: `Pago a ${CANAL_NAMES[pc.canal] || pc.canal}`,
+      sub: 'USD efectivo',
+      amount: monto, currency: 'USD', sign: '-',
+    });
+  });
+
+  // Movimientos manuales (gastos/ingresos extras)
+  movs.forEach(m => {
+    if (!m.amount) return;
+    const cat = (CAJA_CATEGORIAS[m.tipo] || []).find(c => c.id === m.categoria);
+    const catName = cat ? cat.name : m.categoria;
+    ops.push({
+      kind: m.tipo === 'gasto' ? 'out_mov' : 'in_mov',
+      date: m.date, time: (m.created_at || '').slice(11,16) || '12:00',
+      title: catName,
+      sub: `${m.cobro || '?'}${m.descripcion ? ' · ' + m.descripcion : ''}`,
+      amount: m.amount, currency: m.currency || 'CUP',
+      sign: m.tipo === 'gasto' ? '-' : '+',
+    });
+  });
+
+  // Sort cronológico inverso (más reciente primero)
+  ops.sort((a,b) => (b.date + ' ' + b.time).localeCompare(a.date + ' ' + a.time));
+
+  if (!ops.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin operaciones en este período.</div>';
+    return;
+  }
+
+  const fmtAmt = n => Math.round(n).toLocaleString('es');
+  el.innerHTML = ops.map(op => {
+    const color = op.sign === '+' ? 'var(--g)' : 'var(--re)';
+    const icon = op.kind === 'in_trip' ? '🚗' :
+                 op.kind === 'out_pago' ? '👤' :
+                 op.kind === 'out_canal' ? '📲' :
+                 op.kind === 'in_mov' ? '➕' : '➖';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--brd)">
+      <div style="font-size:18px;line-height:1">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${op.title}</div>
+        <div style="font-size:10px;color:var(--txt3)">${op.date} · ${op.time} · ${op.sub}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-weight:600;color:${color}">${op.sign}${fmtAmt(op.amount)} ${op.currency}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Gráficos con Chart.js (lazy) ──
