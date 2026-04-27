@@ -1356,14 +1356,21 @@ async function pbFindOne(coll, filters) {
   return items[0] || null;
 }
 
+// Quita campos reservados de PocketBase que llegan en el record (la PWA
+// usa trip.id = trip_id, lo cual choca con el id interno de PB y causa 400).
+function pbStripIn(rec) {
+  if (!rec || typeof rec !== 'object') return rec;
+  const { id, created, updated, collectionId, collectionName, ...rest } = rec;
+  return rest;
+}
 async function pbCreate(coll, record) {
   return pbReq('/api/collections/' + coll + '/records', {
-    method: 'POST', body: JSON.stringify(record)
+    method: 'POST', body: JSON.stringify(pbStripIn(record))
   });
 }
 async function pbPatch(coll, id, record) {
   return pbReq('/api/collections/' + coll + '/records/' + id, {
-    method: 'PATCH', body: JSON.stringify(record)
+    method: 'PATCH', body: JSON.stringify(pbStripIn(record))
   });
 }
 async function pbDelete(coll, id) {
