@@ -2760,10 +2760,19 @@ function resetAudio() {
 // on-the-fly si no existe.
 function getTripUsd(trip, field) {
   const usdField = field + '_usd';
-  if (typeof trip[usdField] === 'number') return trip[usdField];
-  if ((trip.currency || 'CUP').toUpperCase() === 'USD') return trip[field] || 0;
+  const orig = trip[field];
+  // Sin valor original no hay nada que convertir
+  if (!orig) return 0;
+  // Sólo confiar en el USD congelado si es un número POSITIVO. Trips
+  // viejos guardados sin tasa pueden tener amount_usd=0, lo cual
+  // hacía que el admin no convirtiera y mostrara "—" aunque hubiera
+  // tasa actual disponible.
+  if (typeof trip[usdField] === 'number' && trip[usdField] > 0) return trip[usdField];
+  // Si la moneda original es USD, el field ya está en USD
+  if ((trip.currency || 'CUP').toUpperCase() === 'USD') return orig;
+  // Fallback: convertir on-the-fly con la tasa actual (fxCache)
   if (fxCache) {
-    const v = convertToUsd(trip[field] || 0, trip.currency || 'CUP');
+    const v = convertToUsd(orig, trip.currency || 'CUP');
     if (v) return v.usd;
   }
   return 0;
@@ -2774,6 +2783,13 @@ async function loadResumen() {
   $('a-date').value = date;
 
   let trips = await dbGetTripsByDate(date);
+
+  // Si hay trips locales sin sincronizar, intentamos subirlos a PocketBase
+  // en background. Cubre el caso típico: el admin abre la PWA y ve trips
+  // que el chofer registró offline o que la sync inicial falló.
+  if (fbRef && isOnline && trips.some(t => t.synced === 0)) {
+    syncPending().catch(() => {});
+  }
 
   if (fbRef && isOnline) {
     try {
