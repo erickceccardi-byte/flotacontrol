@@ -1388,6 +1388,12 @@ async function pbUpsert(coll, filters, data) {
 function pbStripMeta(rec) {
   if (!rec) return rec;
   const { id, created, updated, collectionId, collectionName, ...rest } = rec;
+  // Compatibilidad con código tipo Firebase: el `id` del objeto debe ser
+  // la clave de negocio (trip_id, pago_id, mov_id, fecha, driverId), no el
+  // id interno de PocketBase. Sin esto, los botones "eliminar" del admin
+  // pasan undefined y silenciosamente no borran.
+  rest.id = rest.trip_id || rest.pago_id || rest.mov_id || rest.fecha
+            || rest.driverId || rest.singleton_key || id;
   return rest;
 }
 
@@ -1930,18 +1936,18 @@ async function loadHistorial() {
   // Calcular rangos de fechas (hora local Cuba; usamos local del dispositivo)
   const today = new Date();
   today.setHours(0,0,0,0);
-  const todayStr_ = today.toISOString().slice(0,10);
+  const todayStr_ = ymdLocal(today);
   const dates7 = [], dates30 = [];
   for (let i = 0; i < 30; i++) {
     const d = new Date(today); d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0,10);
+    const ds = ymdLocal(d);
     dates30.push(ds);
     if (i < 7) dates7.push(ds);
   }
   // Para "hoy" jornada operativa 04:00→04:00, leemos también hoy y mañana
   // si ya pasaron las 4 AM.
   const todayPlus1 = new Date(today); todayPlus1.setDate(todayPlus1.getDate() + 1);
-  const datesToday = [todayStr_, todayPlus1.toISOString().slice(0,10)];
+  const datesToday = [todayStr_, ymdLocal(todayPlus1)];
 
   // Traer trips de los últimos 30 días (cubre día y semana también)
   let allTrips = [];
@@ -1976,7 +1982,7 @@ async function loadHistorial() {
     if (trip.date === dayYmd && hh >= 4) return true;
     // Día siguiente antes de las 4
     const next = new Date(dayYmd); next.setDate(next.getDate() + 1);
-    const nextStr = next.toISOString().slice(0,10);
+    const nextStr = ymdLocal(next);
     if (trip.date === nextStr && hh < 4) return true;
     return false;
   }
@@ -2064,17 +2070,17 @@ function getDetalleDateRange() {
   const now = new Date();
   if (detPeriod === 'day') {
     const today = new Date(now); today.setHours(0,0,0,0);
-    const todayStr_ = today.toISOString().slice(0,10);
+    const todayStr_ = ymdLocal(today);
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
     const label = today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'});
     return {
       label,
-      dates: [todayStr_, tomorrow.toISOString().slice(0,10)],
+      dates: [todayStr_, ymdLocal(tomorrow)],
       filter: t => {
         if (!t.date || !t.time) return false;
         const [hh] = (t.time||'00:00').split(':').map(Number);
         if (t.date === todayStr_ && hh >= 4) return true;
-        const nextStr = tomorrow.toISOString().slice(0,10);
+        const nextStr = ymdLocal(tomorrow);
         if (t.date === nextStr && hh < 4) return true;
         return false;
       }
@@ -2085,7 +2091,7 @@ function getDetalleDateRange() {
   const today = new Date(now); today.setHours(0,0,0,0);
   for (let i = 0; i < days; i++) {
     const d = new Date(today); d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().slice(0,10));
+    dates.push(ymdLocal(d));
   }
   return {
     label: detPeriod === 'week' ? 'Últimos 7 días' : 'Últimos 30 días',
@@ -2243,7 +2249,7 @@ async function loadDetalle() {
   // Calcular neto de los últimos 90 días, independiente del periodo seleccionado
   const today90 = new Date(); today90.setHours(0,0,0,0);
   const min90 = new Date(today90); min90.setDate(min90.getDate() - 90);
-  const min90Str = min90.toISOString().slice(0,10);
+  const min90Str = ymdLocal(min90);
   let trips90 = [];
   if (fbRef && isOnline) {
     try {
@@ -2251,7 +2257,7 @@ async function loadDetalle() {
       const dates90 = [];
       for (let i = 0; i <= 90; i++) {
         const d = new Date(today90); d.setDate(d.getDate() - i);
-        dates90.push(d.toISOString().slice(0,10));
+        dates90.push(ymdLocal(d));
       }
       const promises = dates90.map(d => fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({})));
       const results = await Promise.all(promises);
@@ -3240,7 +3246,17 @@ function updateOnlineUI() {
 const $ = id => document.getElementById(id);
 const fC = n => Math.round(n).toLocaleString('es') + ' CUP';
 const fK = n => (Math.round(n*10)/10) + ' km';
-const todayStr = () => new Date().toISOString().split('T')[0];
+// Devuelve YYYY-MM-DD en HORA LOCAL del dispositivo (no UTC).
+// Crítico para Cuba: a las 20:00 hora Cuba ya son las 00:00 UTC del día
+// siguiente. Si usáramos toISOString(), los trips quedarían archivados con
+// la fecha del día siguiente y el admin no los encontraría en "hoy".
+function ymdLocal(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+const todayStr = () => ymdLocal(new Date());
 const nowT = () => new Date().toTimeString().slice(0,5);
 
 function toast(m, d=2500) {
@@ -3388,9 +3404,9 @@ function getCajaDateRange() {
   }
   if (cajaPeriod === 'day') {
     const today = new Date(now); today.setHours(0,0,0,0);
-    const t = today.toISOString().slice(0,10);
+    const t = ymdLocal(today);
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
-    const tt = tomorrow.toISOString().slice(0,10);
+    const tt = ymdLocal(tomorrow);
     return {
       label: today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'}),
       dates: [t, tt],
@@ -3409,7 +3425,7 @@ function getCajaDateRange() {
   const today = new Date(now); today.setHours(0,0,0,0);
   for (let i = 0; i < days; i++) {
     const d = new Date(today); d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().slice(0,10));
+    dates.push(ymdLocal(d));
   }
   return {
     label: cajaPeriod === 'week' ? 'Últimos 7 días' : 'Últimos 30 días',
