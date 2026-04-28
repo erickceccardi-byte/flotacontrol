@@ -517,6 +517,17 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div class="net-prev" id="net-prev"></div>
       <div id="tip-warn" style="font-size:11px;color:var(--re);font-weight:500;display:none;padding:3px 2px"></div>
+
+      <!-- Pagos adicionales: cuando el cliente paga con varias monedas
+           (ej. 10000 CUP + 10 EUR + 5 USD), las extras van acá. -->
+      <div id="extra-pay-list" style="display:flex;flex-direction:column;gap:4px;margin-top:6px"></div>
+      <button type="button" onclick="openExtraPayModal()" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;width:100%;margin-top:4px">+ Otra moneda en este cobro</button>
+
+      <!-- Toggle pendiente de cobro -->
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--txt2);cursor:pointer">
+        <input type="checkbox" id="f-pending" style="margin:0">
+        <span>Carrera <strong>pendiente de cobro</strong> — el cliente paga después</span>
+      </label>
     </div>
 
     <!-- PAGO — 2 botones grandes -->
@@ -593,6 +604,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="atab active" onclick="showATab('resumen',this)">Resumen</div>
       <div class="atab" onclick="showATab('historial',this)">Historial</div>
       <div class="atab" onclick="showATab('detalle',this)">Detalle</div>
+      <div class="atab" onclick="showATab('pendientes',this)">Pendientes</div>
       <div class="atab" onclick="showATab('caja',this)">Caja</div>
       <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
       <div class="atab" onclick="showATab('gps',this)">GPS</div>
@@ -879,6 +891,18 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="spacer"></div>
     </div>
 
+    <!-- PENDIENTES DE COBRO: carreras registradas pero todavía no cobradas -->
+    <div class="otab-pane" id="atp-pendientes">
+      <div class="sh">Carreras pendientes de cobro</div>
+      <div style="font-size:12px;color:var(--txt2);margin-bottom:10px">
+        Carreras registradas por choferes que el cliente aún no pagó. Cuando recibas el pago, hacé clic en <strong>"Marcar cobrada"</strong> para que entre a caja.
+      </div>
+      <div id="pend-list">
+        <div style="font-size:13px;color:var(--txt3);text-align:center;padding:20px">Cargando...</div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+
     <!-- CAJA EMPRESA: matriz de saldos por moneda × forma + movimientos + gráficos -->
     <div class="otab-pane" id="atp-caja">
       <div class="card" style="padding:10px 12px;margin-bottom:10px">
@@ -906,6 +930,18 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-saldo-total-usd" style="text-align:center;font-size:13px;color:var(--txt2);margin-top:10px;font-weight:500"></div>
       <div id="caja-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-2px;margin-bottom:8px;text-align:center"></div>
+
+      <div class="sh">Pendiente de entrega de choferes</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Efectivo cobrado por choferes que aún no fue entregado. Cuando el chofer te traiga el dinero, marcá <strong>"Recibí entrega"</strong> y entrará a caja.
+      </div>
+      <div id="caja-pending-handover"></div>
+
+      <div class="sh">Transferencias por verificar</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Transferencias recibidas pero no marcadas como verificadas. Sirven para confirmación posterior con el banco.
+      </div>
+      <div id="caja-pending-verify"></div>
 
       <div class="sh">Libro de operaciones</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
@@ -1162,6 +1198,14 @@ audio{width:100%;height:36px;margin-top:6px}
       <span style="font-size:12px;color:var(--g);font-weight:500">Propinas del día</span>
       <span class="bs-val g" id="drv-tip" style="font-size:14px">—</span>
     </div>
+    <!-- Acumulado pendiente de entregar/verificar -->
+    <div id="drv-pending-card" style="margin:0 14px 12px;padding:10px 12px;background:var(--ambg);border:1px solid var(--ambrd);border-radius:10px;display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;color:var(--am);font-weight:600">⚠ Pendiente de entregar al admin</span>
+        <span style="font-size:11px;color:var(--am)" id="drv-pending-total">—</span>
+      </div>
+      <div id="drv-pending-list" style="font-size:11px;color:var(--txt2)"></div>
+    </div>
     <div class="bsheet-list" id="drv-trips">
       <div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>
     </div>
@@ -1176,6 +1220,76 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="dmodal-actions">
       <button class="dmodal-btn dmodal-cancel" onclick="closeDescModal()">Cancelar</button>
       <button class="dmodal-btn dmodal-save" onclick="saveDescModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MINI-MODAL: EDITAR CARRERA (admin) ═══════════ -->
+<div id="modal-edit-trip" class="dmodal">
+  <div class="dmodal-card" style="max-width:480px">
+    <div class="dmodal-ttl">Editar carrera</div>
+    <input type="hidden" id="et-trip-id">
+    <input type="hidden" id="et-trip-date">
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px" id="et-meta"></div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <select id="et-source" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="directo">Directa</option>
+        <option value="cinco">Cinco</option>
+        <option value="wapp">WhatsApp</option>
+        <option value="nave">La Nave</option>
+        <option value="nave_billetera">Nave Billetera</option>
+      </select>
+      <select id="et-driver" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none"></select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="number" id="et-amount" placeholder="Monto" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="et-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="CUP">CUP</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+      </select>
+      <select id="et-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transferencia</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="date" id="et-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+      <input type="time" id="et-time" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+    </div>
+    <input type="text" id="et-desc" placeholder="Descripción / nota" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div style="font-size:11px;color:var(--txt3);margin-top:2px">⚠ El cambio recalcula comisión, neto y conversión USD con la tasa actual.</div>
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeEditTrip()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveEditTrip()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MINI-MODAL: OTRA MONEDA EN ESTE COBRO ═══════════ -->
+<div id="modal-extra-pay" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Agregar otra moneda</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Sumá una denominación adicional al cobro de esta carrera (por ejemplo: el cliente te dio CUP + EUR + USD juntos).
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input type="number" id="ep-amount" placeholder="0" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="ep-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+        <option value="CUP">CUP</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <select id="ep-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transferencia</option>
+      </select>
+    </div>
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeExtraPayModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="addExtraPay()">Agregar</button>
     </div>
   </div>
 </div>
@@ -1948,9 +2062,95 @@ function showATab(name, el) {
   }
   if (name === 'historial') loadHistorial();
   if (name === 'detalle') loadDetalle();
+  if (name === 'pendientes') loadPendientes();
   if (name === 'caja') loadCaja();
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
+}
+
+// ════════════════════════════════════════
+// PENDIENTES DE COBRO (admin)
+// ════════════════════════════════════════
+async function loadPendientes() {
+  const el = $('pend-list');
+  if (!el) return;
+  if (!fbRef || !isOnline) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--txt3);text-align:center;padding:20px">Sin conexión.</div>';
+    return;
+  }
+  try {
+    const snap = await fbRef.ref('trips').once('value');
+    const days = snap.val() || {};
+    const pending = [];
+    for (const [date, trips] of Object.entries(days)) {
+      for (const [tid, t] of Object.entries(trips || {})) {
+        if (!t || typeof t !== 'object') continue;
+        if (t.payment_status === 'pending') pending.push(t);
+      }
+    }
+    pending.sort((a,b) => ((b.date||'')+ ' ' + (b.time||'')).localeCompare((a.date||'')+ ' ' +(a.time||'')));
+    if (!pending.length) {
+      el.innerHTML = '<div class="card" style="padding:20px;text-align:center;color:var(--txt3)">Sin carreras pendientes de cobro 🎉</div>';
+      return;
+    }
+    el.innerHTML = pending.map(t => {
+      const cur = t.currency || 'CUP';
+      const usdEq = (t.amount_usd && t.amount_usd > 0) ? ` ≈ $${t.amount_usd.toFixed(2)}` : '';
+      return `<div class="card" style="padding:12px;margin-bottom:8px">
+        <div style="display:flex;align-items:start;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600">${t.driverName || '?'} · ${SRC[t.source] || t.source}</div>
+            <div style="font-size:11px;color:var(--txt3);margin-top:2px">${t.date} ${t.time||''}${t.origin ? ' · ' + t.origin + ' → ' + (t.destination||'?') : ''}</div>
+            ${t.desc ? `<div style="font-size:11px;color:var(--txt2);margin-top:3px">📝 ${t.desc}</div>` : ''}
+          </div>
+          <div style="text-align:right;white-space:nowrap">
+            <div style="font-weight:700;font-size:16px">${Math.round(t.amount).toLocaleString('es')} ${cur}</div>
+            <div style="font-size:10px;color:var(--g)">${usdEq}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btnacc" style="flex:1;padding:8px;font-size:13px" onclick="markTripCollected('${t.id || t.trip_id}','${t.date}')">✓ Marcar cobrada</button>
+          <button class="btn" style="padding:8px 12px;font-size:13px" onclick="openEditTrip('${t.id || t.trip_id}','${t.date}')">✎ Editar</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--re)">Error: ' + e.message + '</div>';
+  }
+}
+
+// ── Marcar carrera pendiente como cobrada ──
+// Pregunta al admin cómo se cobró (efectivo o transferencia, en la moneda
+// principal de la carrera, por simplicidad). Si quiere multi-denom, puede
+// editar la carrera después.
+async function markTripCollected(tripId, date) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    const snap = await fbRef.ref(`trips/${date}/${tripId}`).once('value');
+    const t = snap.val();
+    if (!t) { toast('Carrera no encontrada'); return; }
+    const cobro = prompt(`¿Cómo cobraste? Tipeá: e (efectivo) o t (transferencia)`, 'e');
+    if (!cobro) return;
+    const cob = (cobro.toLowerCase().startsWith('t')) ? 'transferencia' : 'efectivo';
+    const status = initialPaymentStatus(cob, t.source);
+    const payments = [{
+      amount: t.amount, currency: t.currency || 'CUP', cobro: cob, status,
+      paid_at: new Date().toISOString()
+    }];
+    if (t.tipAmount && t.tipAmount > 0) {
+      payments.push({
+        amount: t.tipAmount, currency: t.currency || 'CUP', cobro: cob,
+        status, paid_at: new Date().toISOString(), is_tip: true
+      });
+    }
+    await fbRef.ref(`trips/${date}/${tripId}`).update({
+      cobro: cob, payments, payment_status: 'paid'
+    });
+    toast('Carrera marcada cobrada ✓');
+    loadPendientes();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
 }
 
 // ════════════════════════════════════════
@@ -2521,10 +2721,13 @@ async function regTrip() {
   if (!selCan) { toast('Selecciona el canal'); return; }
   const amt = parseFloat($('f-amt').value);
   if (!amt || amt <= 0) { toast('Ingresa el monto de la carrera'); return; }
+  // ── Toggle "Pendiente de cobro" — la carrera se registra sin pagos
+  // recibidos. Se cobrará después y el admin (o el chofer) la marca cobrada.
+  const pendingCollection = !!$('f-pending')?.checked;
   // Para Nave Billetera no se pide forma de cobro (el dinero no entra a caja).
   if (selCan === 'nave_billetera') {
     selCobroType = 'billetera';
-  } else if (!selCobroType) {
+  } else if (!selCobroType && !pendingCollection) {
     toast('Selecciona la forma de cobro'); return;
   }
 
@@ -2561,6 +2764,53 @@ async function regTrip() {
   const netUsd = convertToUsd(net, currency);
   const tipUsd = tip > 0 ? convertToUsd(tip, currency) : null;
 
+  // ── Construir array de pagos (multi-denominación) ──────────────────
+  // Si la carrera está marcada como "pendiente de cobro": array vacío y
+  // payment_status='pending'. El admin/chofer la marcarán cobrada después.
+  // Si no: pago principal (amt + currency + selCobroType) + extras del modal.
+  const nowIso = new Date().toISOString();
+  let payments = [];
+  let paymentStatus = 'paid';
+  if (pendingCollection) {
+    paymentStatus = 'pending';
+    payments = [];
+  } else {
+    payments.push({
+      amount: amt,
+      currency,
+      cobro: selCobroType,
+      status: initialPaymentStatus(selCobroType, selCan),
+      paid_at: nowIso
+    });
+    // Pagos extras (denominaciones distintas, ej. 10 EUR + 5 USD adicionales)
+    // se acumulan en window._extraPayments cuando el chofer usa el modal.
+    if (Array.isArray(window._extraPayments)) {
+      for (const ep of window._extraPayments) {
+        if (!ep || !ep.amount || ep.amount <= 0) continue;
+        payments.push({
+          amount: ep.amount,
+          currency: ep.currency || 'CUP',
+          cobro: ep.cobro || selCobroType,
+          status: initialPaymentStatus(ep.cobro || selCobroType, selCan),
+          paid_at: nowIso
+        });
+      }
+    }
+    // Si hubo propina (total > amt), la sumamos como pago extra en la
+    // misma moneda y forma que el principal. Se descuenta al chofer si
+    // es efectivo, igual que el resto.
+    if (tip > 0) {
+      payments.push({
+        amount: tip,
+        currency,
+        cobro: selCobroType,
+        status: initialPaymentStatus(selCobroType, selCan),
+        paid_at: nowIso,
+        is_tip: true
+      });
+    }
+  }
+
   const trip = {
     id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
     date: t, time: nowT(),
@@ -2577,6 +2827,9 @@ async function regTrip() {
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
     cobro: selCobroType,
+    // Pagos multi-denominación + estado de cobro de la carrera
+    payments,
+    payment_status: paymentStatus,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value || '',
     destination: $('f-dst').value || '',
@@ -2602,6 +2855,9 @@ async function regTrip() {
   if ($('f-org')) $('f-org').value = '';
   if ($('f-dst')) $('f-dst').value = '';
   if ($('f-pax')) $('f-pax').value = '1';
+  if ($('f-pending')) $('f-pending').checked = false;
+  window._extraPayments = [];
+  renderExtraPaymentsList();
   $('net-prev').textContent = '';
   if ($('tip-warn')) $('tip-warn').style.display = 'none';
   // Quitar marca de "tiene contenido" del botón "+ Más"
@@ -2806,6 +3062,70 @@ function getTripUsd(trip, field) {
   return 0;
 }
 
+// ════════════════════════════════════════
+// PAGOS POR CARRERA (multi-denominación)
+// ════════════════════════════════════════
+// Una carrera puede haberse cobrado con varias monedas / formas distintas.
+// Modelo:
+//   trip.payments = [{amount, currency, cobro, status, paid_at}, ...]
+//   trip.payment_status = 'paid' | 'pending'
+//
+// Estados de cada pago:
+//   - 'pending_handover'      : efectivo todavía en manos del chofer
+//   - 'handed_over'           : efectivo entregado por chofer al admin
+//   - 'pending_verification'  : transferencia recibida pero no verificada
+//   - 'verified'              : transferencia verificada por el admin
+//   - 'billetera'             : pago directo a La Nave (no afecta caja)
+//
+// Compatibilidad con trips viejas: si trip.payments está vacío o no existe,
+// sintetizamos un payment desde amount/currency/cobro con estado "legacy"
+// (asumimos handed_over/verified — eso reproduce el comportamiento anterior
+// donde todo entraba a caja al instante).
+function getTripPayments(trip) {
+  if (Array.isArray(trip.payments) && trip.payments.length) return trip.payments;
+  // Sintetizar para retrocompat
+  if (!trip.amount) return [];
+  const cobro = trip.cobro || 'efectivo';
+  let status;
+  if (cobro === 'billetera' || trip.source === 'nave_billetera') status = 'billetera';
+  else if (cobro === 'transferencia') status = 'verified';   // legacy: ya está en caja
+  else status = 'handed_over';                                // legacy: ya está en caja
+  return [{
+    amount: trip.amount,
+    currency: trip.currency || 'CUP',
+    cobro,
+    status,
+    paid_at: trip.date + 'T' + (trip.time || '00:00') + ':00'
+  }];
+}
+
+// Estado inicial al registrar un payment nuevo (antes de entrega/verificación)
+function initialPaymentStatus(cobro, source) {
+  if (source === 'nave_billetera' || cobro === 'billetera') return 'billetera';
+  if (cobro === 'transferencia') return 'pending_verification';
+  return 'pending_handover'; // efectivo
+}
+
+// Suma USD de un array de payments (con fallback fxCache)
+function paymentsTotalUsd(payments) {
+  if (!Array.isArray(payments)) return 0;
+  let total = 0;
+  for (const p of payments) {
+    if (!p || !p.amount) continue;
+    if ((p.currency || 'CUP').toUpperCase() === 'USD') { total += p.amount; continue; }
+    if (fxCache) {
+      const v = convertToUsd(p.amount, p.currency || 'CUP');
+      if (v) total += v.usd;
+    }
+  }
+  return total;
+}
+
+// True si la carrera está total o parcialmente sin cobrar.
+function isTripPending(trip) {
+  return trip && (trip.payment_status === 'pending');
+}
+
 // Período activo del Resumen: 'day' | 'week' | 'month' | 'custom'.
 let resumenPeriod = 'day';
 
@@ -3004,6 +3324,9 @@ function tripHTML(r, showDel) {
     ? '<span class="cobro-tag ct-trans">📲 Transferencia</span>'
     : '';
   const syncTag = r.synced ? '<span class="badge b-synced" style="font-size:9px">✓ sync</span>' : '<span class="badge b-sync" style="font-size:9px">⏳ local</span>';
+  // Admin: botón editar + eliminar. Chofer: solo eliminar.
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const editBtn = (showDel && isAdmin) ? `<div class="ti-del" style="color:var(--txt2);cursor:pointer;font-size:11px" onclick="openEditTrip('${r.id}','${r.date}')">editar</div>` : '';
   const del = showDel ? `<div class="ti-del" onclick="delTrip('${r.id}','${r.date}')">eliminar</div>` : '';
   const audioHTML = r.audioB64 && r.audioB64 !== '[audio-local-only]'
     ? `<div class="ti-audio"><audio controls src="${r.audioB64}" style="width:100%;height:32px"></audio></div>` : '';
@@ -3025,6 +3348,7 @@ function tripHTML(r, showDel) {
       <div class="ti-neto">${Math.round(r.netAmount).toLocaleString('es')} ${r.currency||'CUP'}</div>
       <div class="ti-bruto">${Math.round(r.amount).toLocaleString('es')} ${r.currency||'CUP'} bruto</div>
       ${(r.currency || 'CUP') !== 'USD' && r.netAmount_usd ? `<div style="font-size:10px;color:var(--g);margin-top:2px">≈ $${r.netAmount_usd.toFixed(2)}</div>` : ''}
+      ${editBtn}
       ${del}
     </div>
   </div>`;
@@ -3445,9 +3769,82 @@ function populateZoneDropdowns() {
 // ════════════════════════════════════════
 function openHoySheet() {
   loadDriverTrips(); // refrescar datos
+  loadDriverPendingAcumulado(); // mostrar lo pendiente entregar/verificar
   const today = new Date().toLocaleDateString('es', {day:'numeric', month:'long'});
   if ($('sheet-date')) $('sheet-date').textContent = '· ' + today;
   $('sheet-hoy').classList.add('show');
+}
+
+// ── Cargar y mostrar acumulado pendiente del chofer (últimos 60 días) ──
+async function loadDriverPendingAcumulado() {
+  const card = $('drv-pending-card');
+  const listEl = $('drv-pending-list');
+  const totalEl = $('drv-pending-total');
+  if (!card || !listEl || !currentUser || currentUser.role !== 'driver') return;
+  try {
+    let trips = [];
+    // Últimos 60 días: leemos IDB primero, luego completar con PB
+    const today = new Date(); today.setHours(0,0,0,0);
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const ds = ymdLocal(d);
+      try { trips = trips.concat(await dbGetTripsByDate(ds)); } catch(e) {}
+    }
+    if (fbRef && isOnline) {
+      const localIds = new Set(trips.map(t => t.id));
+      for (let i = 0; i < 60; i++) {
+        const d = new Date(today); d.setDate(d.getDate() - i);
+        const ds = ymdLocal(d);
+        try {
+          const snap = await fbRef.ref('trips/' + ds).once('value');
+          const v = snap.val() || {};
+          for (const ft of Object.values(v)) {
+            if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
+              trips.push(ft);
+              localIds.add(ft.id);
+            }
+          }
+        } catch(e) {}
+      }
+    }
+    // Filtrar carreras del chofer actual y sumar payments pendientes
+    const mine = trips.filter(t => t.driverId === currentUser.id);
+    const byCur = {}; // {currency: {efectivo: 0, transferencia: 0}}
+    let totalUsd = 0;
+    let count = 0;
+    mine.forEach(t => {
+      if (t.payment_status === 'pending') return; // carreras sin cobrar todavía no cuentan acá
+      const pays = getTripPayments(t);
+      pays.forEach(p => {
+        if (!p || !p.amount) return;
+        if (p.status === 'pending_handover' || p.status === 'pending_verification') {
+          const cur = (p.currency || 'CUP').toUpperCase();
+          if (!byCur[cur]) byCur[cur] = { efectivo: 0, transferencia: 0 };
+          byCur[cur][p.cobro || 'efectivo'] += p.amount;
+          count++;
+          if (cur === 'USD') totalUsd += p.amount;
+          else if (fxCache) {
+            const v = convertToUsd(p.amount, cur);
+            if (v) totalUsd += v.usd;
+          }
+        }
+      });
+    });
+    if (!count) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = 'block';
+    totalEl.textContent = totalUsd ? '≈ $' + totalUsd.toFixed(2) + ' USD' : '';
+    listEl.innerHTML = Object.entries(byCur).map(([cur, forms]) => {
+      const lines = [];
+      if (forms.efectivo > 0) lines.push(`💵 ${Math.round(forms.efectivo).toLocaleString('es')} ${cur}`);
+      if (forms.transferencia > 0) lines.push(`📲 ${Math.round(forms.transferencia).toLocaleString('es')} ${cur}`);
+      return lines.join(' · ');
+    }).join('<br>');
+  } catch(e) {
+    console.warn('pending acumulado error', e);
+  }
 }
 function closeHoySheet() {
   $('sheet-hoy').classList.remove('show');
@@ -3477,6 +3874,134 @@ function saveDescModal() {
     }
   });
   closeDescModal();
+}
+
+// ════════════════════════════════════════
+// MINI-MODAL: EDITAR CARRERA (admin)
+// ════════════════════════════════════════
+async function openEditTrip(tripId, date) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    const snap = await fbRef.ref(`trips/${date}/${tripId}`).once('value');
+    const t = snap.val();
+    if (!t) { toast('Carrera no encontrada'); return; }
+    $('et-trip-id').value = tripId;
+    $('et-trip-date').value = date;
+    $('et-meta').textContent = `trip_id ${tripId.substring(0,20)}…`;
+    $('et-source').value = t.source || 'directo';
+    // Llenar drivers
+    const drvSel = $('et-driver');
+    drvSel.innerHTML = getDrivers().map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    drvSel.value = t.driverId || '';
+    $('et-amount').value = t.amount || '';
+    $('et-currency').value = t.currency || 'CUP';
+    $('et-cobro').value = t.cobro || 'efectivo';
+    $('et-date').value = t.date || '';
+    $('et-time').value = t.time || '';
+    $('et-desc').value = t.desc || '';
+    $('modal-edit-trip').classList.add('show');
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+function closeEditTrip() {
+  $('modal-edit-trip').classList.remove('show');
+}
+async function saveEditTrip() {
+  const oldId = $('et-trip-id').value;
+  const oldDate = $('et-trip-date').value;
+  const newDate = $('et-date').value;
+  const newTime = $('et-time').value;
+  const amt = parseFloat($('et-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('et-currency').value;
+  const cobro = $('et-cobro').value;
+  const source = $('et-source').value;
+  const drvSel = $('et-driver');
+  const driverId = drvSel.value;
+  const driverName = drvSel.options[drvSel.selectedIndex]?.text || '';
+
+  const r = getCom(source);
+  const com = Math.round(amt * r / 100);
+  const net = amt - com;
+  const amtUsd = convertToUsd(amt, currency);
+  const comUsd = convertToUsd(com, currency);
+  const netUsd = convertToUsd(net, currency);
+
+  const updates = {
+    source, driverId, driverName,
+    amount: amt, currency, cobro,
+    commRate: r, commAmount: com, netAmount: net,
+    date: newDate, time: newTime,
+    desc: $('et-desc').value.trim(),
+    amount_usd: amtUsd ? amtUsd.usd : null,
+    commAmount_usd: comUsd ? comUsd.usd : null,
+    netAmount_usd: netUsd ? netUsd.usd : null,
+    fx_rate_used: amtUsd ? amtUsd.rate_used : null,
+    fx_rate_date: amtUsd ? amtUsd.rate_date : null
+  };
+  try {
+    if (newDate === oldDate) {
+      await fbRef.ref(`trips/${oldDate}/${oldId}`).update(updates);
+    } else {
+      // Cambió la fecha → re-crear con nueva fecha y borrar el viejo
+      const oldSnap = await fbRef.ref(`trips/${oldDate}/${oldId}`).once('value');
+      const merged = { ...oldSnap.val(), ...updates };
+      await fbRef.ref(`trips/${newDate}/${oldId}`).set(merged);
+      await fbRef.ref(`trips/${oldDate}/${oldId}`).remove();
+    }
+    toast('Carrera actualizada ✓');
+    closeEditTrip();
+    // Refrescar la vista activa
+    if ($('atp-resumen')?.classList.contains('active')) loadResumen();
+    else if ($('atp-detalle')?.classList.contains('active')) loadDetalle();
+    else if ($('atp-pendientes')?.classList.contains('active')) loadPendientes();
+    else if ($('atp-historial')?.classList.contains('active')) loadHistorial();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+// ════════════════════════════════════════
+// MINI-MODAL: OTRA MONEDA (multi-denominación)
+// ════════════════════════════════════════
+window._extraPayments = window._extraPayments || [];
+
+function openExtraPayModal() {
+  if ($('ep-amount')) $('ep-amount').value = '';
+  if ($('ep-currency')) $('ep-currency').value = 'CUP';
+  if ($('ep-cobro')) $('ep-cobro').value = 'efectivo';
+  $('modal-extra-pay').classList.add('show');
+  setTimeout(() => $('ep-amount')?.focus(), 100);
+}
+function closeExtraPayModal() {
+  $('modal-extra-pay').classList.remove('show');
+}
+function addExtraPay() {
+  const amt = parseFloat($('ep-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const cur = $('ep-currency').value;
+  const cob = $('ep-cobro').value;
+  window._extraPayments.push({ amount: amt, currency: cur, cobro: cob });
+  closeExtraPayModal();
+  renderExtraPaymentsList();
+}
+function removeExtraPay(idx) {
+  if (!Array.isArray(window._extraPayments)) return;
+  window._extraPayments.splice(idx, 1);
+  renderExtraPaymentsList();
+}
+function renderExtraPaymentsList() {
+  const el = $('extra-pay-list');
+  if (!el) return;
+  const arr = window._extraPayments || [];
+  if (!arr.length) { el.innerHTML = ''; return; }
+  el.innerHTML = arr.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font-size:12px">
+      <span style="flex:1">+ ${Math.round(p.amount).toLocaleString('es')} ${p.currency} · ${p.cobro === 'transferencia' ? '📲 Transfer' : '💵 Efectivo'}</span>
+      <button onclick="removeExtraPay(${i})" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:0 4px">✕</button>
+    </div>
+  `).join('');
 }
 
 // ════════════════════════════════════════
@@ -3851,14 +4376,47 @@ async function loadCaja() {
     matriz[c].transferencia = saldo[c].transferencia || 0;
   });
 
-  // 2) Ingresos por carrera: TOTAL recibido del cliente = amount + tipAmount
-  //    en moneda y forma de la carrera (mantenemos denominaciones).
-  //    EXCEPCIÓN: 'nave_billetera' — el cliente paga directamente a La Nave,
-  //    el dinero NO entra a caja (no se aplica a la matriz).
+  // 2) Ingresos por carrera. Modelo nuevo:
+  //    Cada trip tiene trip.payments[] con varios pagos (amount, currency,
+  //    cobro, status). Solo entran a caja los que YA están con el admin:
+  //      - efectivo: status='handed_over' (chofer ya entregó el dinero)
+  //      - transferencia: cualquier status que no sea pending_verification
+  //    Los pendientes se acumulan aparte (driverPending / pendingTransfers).
+  //    Compatibilidad: getTripPayments() sintetiza un payment de
+  //    amount/currency/cobro para trips viejas, marcándolas como
+  //    'handed_over' o 'verified' (entran a caja como antes).
+  //    EXCEPCIÓN: 'nave_billetera' / cobro='billetera' — no afecta caja.
+  const driverPending = {};   // {driverId: {currency: {efectivo: amount, transferencia: amount}}}
+  const pendingTransfers = []; // [{trip_id, driverId, driverName, amount, currency, date, time, payment_index}]
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
-    const total = (t.amount || 0) + (t.tipAmount || 0);
-    aplicarATraza(matriz, t.currency, t.cobro, total);
+    if (t.payment_status === 'pending') return; // carrera todavía no cobrada → no afecta caja
+    const pays = getTripPayments(t);
+    pays.forEach((p, idx) => {
+      if (!p || !p.amount) return;
+      if (p.status === 'billetera') return;
+      if (p.status === 'handed_over' || p.status === 'verified') {
+        // Ya está en caja (efectivo entregado o transferencia verificada/legacy)
+        aplicarATraza(matriz, p.currency, p.cobro, p.amount);
+      } else if (p.status === 'pending_handover') {
+        // Efectivo aún en manos del chofer
+        const drv = t.driverId || '?';
+        if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {} };
+        const cur = (p.currency || 'CUP').toUpperCase();
+        if (!driverPending[drv].byCur[cur]) driverPending[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
+        driverPending[drv].byCur[cur][p.cobro || 'efectivo'] += p.amount;
+      } else if (p.status === 'pending_verification') {
+        // Transferencia recibida pero no verificada — sí entra a caja
+        // (porque ya está en la cuenta) pero también queda en lista para que
+        // el admin marque verificada cuando confirme.
+        aplicarATraza(matriz, p.currency, p.cobro, p.amount);
+        pendingTransfers.push({
+          trip_id: t.trip_id || t.id, driverId: t.driverId, driverName: t.driverName,
+          amount: p.amount, currency: p.currency, cobro: p.cobro,
+          date: t.date, time: t.time, payment_index: idx
+        });
+      }
+    });
   });
 
   // 3) Pagos a choferes (salario, propinas, bono trimestral): salen de
@@ -4043,6 +4601,10 @@ async function loadCaja() {
     }
   }
 
+  // ─── Pendiente entrega de choferes + Transferencias por verificar ───
+  renderCajaPendingHandover(driverPending);
+  renderCajaPendingVerify(pendingTransfers);
+
   // ─── Libro de operaciones (todas las entradas y salidas) ───
   // Junta trips + pagos + pagosCanal + movs en una sola lista cronológica.
   renderCajaLibro(trips, pagos, pagosCanal, movs);
@@ -4143,6 +4705,131 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Pendiente de entrega de choferes (efectivo) ──
+function renderCajaPendingHandover(byDriver) {
+  const el = $('caja-pending-handover');
+  if (!el) return;
+  const drivers = Object.entries(byDriver || {});
+  if (!drivers.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin pendientes — todos los choferes entregaron lo del período.</div>';
+    return;
+  }
+  const fmt = n => Math.round(n).toLocaleString('es');
+  el.innerHTML = drivers.map(([drvId, d]) => {
+    const lines = [];
+    let totalUsd = 0;
+    Object.entries(d.byCur).forEach(([cur, forms]) => {
+      const ef = forms.efectivo || 0;
+      if (ef > 0) {
+        lines.push(`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>💵 Efectivo:</span><span style="font-weight:600">${fmt(ef)} ${cur}</span></div>`);
+        if (cur === 'USD') totalUsd += ef;
+        else if (fxCache) {
+          const v = convertToUsd(ef, cur);
+          if (v) totalUsd += v.usd;
+        }
+      }
+    });
+    return `<div class="card" style="margin-bottom:8px;padding:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-weight:600;font-size:15px">${d.name}</div>
+        <div style="font-size:11px;color:var(--txt3)">≈ $${totalUsd.toFixed(2)} USD</div>
+      </div>
+      ${lines.join('') || '<div style="color:var(--txt3);font-size:12px">Sin efectivo pendiente</div>'}
+      <button class="btn btnacc" style="margin-top:10px;width:100%" onclick="markDriverHandover('${drvId}')">Recibí entrega completa de ${d.name}</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Marca todos los pagos efectivo pendientes de un chofer como entregados ──
+async function markDriverHandover(driverId) {
+  if (!confirm('¿Confirmás que recibiste TODO el efectivo pendiente de este chofer? Los montos pasarán a caja.')) return;
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    // Recorrer todas las trips del chofer y actualizar payments con
+    // status='pending_handover' → 'handed_over'.
+    const tSnap = await fbRef.ref('trips').once('value');
+    const days = tSnap.val() || {};
+    let updated = 0;
+    for (const [date, trips] of Object.entries(days)) {
+      for (const [tid, t] of Object.entries(trips || {})) {
+        if (!t || typeof t !== 'object' || t.driverId !== driverId) continue;
+        const pays = Array.isArray(t.payments) ? t.payments : [];
+        let changed = false;
+        const newPays = pays.map(p => {
+          if (p && p.status === 'pending_handover') {
+            changed = true;
+            return { ...p, status: 'handed_over', handed_over_at: new Date().toISOString() };
+          }
+          return p;
+        });
+        if (changed) {
+          await fbRef.ref(`trips/${date}/${tid}`).update({ payments: newPays });
+          updated++;
+        }
+      }
+    }
+    // Registrar entrega en su colección (audit trail)
+    const entrega = {
+      entrega_id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      driverId, date: todayStr(),
+      received_at: new Date().toISOString(),
+      received_by: currentUser ? currentUser.id : 'admin',
+      trip_ids: [], total_usd: 0, breakdown: {}, note: ''
+    };
+    try { await fbRef.ref(`entregas/${entrega.entrega_id}`).set(entrega); } catch(e) {}
+
+    toast(`Entrega registrada (${updated} carreras actualizadas)`);
+    loadCaja();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+// ── Transferencias por verificar ──
+function renderCajaPendingVerify(list) {
+  const el = $('caja-pending-verify');
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">No hay transferencias pendientes de verificar.</div>';
+    return;
+  }
+  const fmt = n => Math.round(n).toLocaleString('es');
+  // Sort por fecha + hora desc
+  const sorted = [...list].sort((a,b) =>
+    ((b.date||'') + ' ' + (b.time||'')).localeCompare((a.date||'') + ' ' + (a.time||'')));
+  el.innerHTML = sorted.map(p => `
+    <div class="card" style="margin-bottom:6px;padding:10px;display:flex;align-items:center;gap:10px">
+      <div style="font-size:18px">📲</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500">${p.driverName || '?'} · ${p.date} ${p.time||''}</div>
+        <div style="font-size:11px;color:var(--txt3)">trip ${(p.trip_id||'').substring(0,18)}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap;margin-right:6px">
+        <div style="font-weight:600">${fmt(p.amount)} ${p.currency}</div>
+      </div>
+      <button class="btn btnacc" onclick="markPaymentVerified('${p.trip_id}','${p.date}',${p.payment_index})" style="white-space:nowrap;padding:6px 10px;font-size:12px">✓ Verificada</button>
+    </div>
+  `).join('');
+}
+
+// ── Marcar una transferencia individual como verificada ──
+async function markPaymentVerified(tripId, date, paymentIndex) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    const snap = await fbRef.ref(`trips/${date}/${tripId}`).once('value');
+    const t = snap.val();
+    if (!t) { toast('Carrera no encontrada'); return; }
+    const pays = Array.isArray(t.payments) ? [...t.payments] : [];
+    if (!pays[paymentIndex]) { toast('Pago no encontrado'); return; }
+    pays[paymentIndex] = { ...pays[paymentIndex], status: 'verified', verified_at: new Date().toISOString() };
+    await fbRef.ref(`trips/${date}/${tripId}`).update({ payments: pays });
+    toast('Transferencia verificada ✓');
+    loadCaja();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
 }
 
 // ── Gráficos con Chart.js (lazy) ──
