@@ -1305,6 +1305,10 @@ audio{width:100%;height:36px;margin-top:6px}
       <input type="time" id="et-time" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
     </div>
     <input type="text" id="et-desc" placeholder="Descripción / nota" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <label style="display:flex;align-items:center;gap:6px;margin:6px 0;font-size:12px;color:var(--txt2);cursor:pointer">
+      <input type="checkbox" id="et-pending" style="margin:0;flex-shrink:0">
+      <span>Marcar como <strong>pendiente de cobro</strong> (cliente paga después)</span>
+    </label>
     <div style="font-size:11px;color:var(--txt3);margin-top:2px">⚠ El cambio recalcula comisión, neto y conversión USD con la tasa actual.</div>
     <div class="dmodal-actions">
       <button class="dmodal-btn dmodal-cancel" onclick="closeEditTrip()">Cancelar</button>
@@ -4117,6 +4121,12 @@ async function openEditTrip(tripId, date) {
     $('et-date').value = t.date || '';
     $('et-time').value = t.time || '';
     $('et-desc').value = t.desc || '';
+    if ($('et-pending')) $('et-pending').checked = (t.payment_status === 'pending');
+    // El chofer NO puede cambiar la fecha (solo admin). Tampoco el chofer
+    // puede reasignar la carrera a otro driver.
+    const isAdmin = currentUser && currentUser.role === 'admin';
+    if ($('et-date')) $('et-date').disabled = !isAdmin;
+    if ($('et-driver')) $('et-driver').disabled = !isAdmin;
     $('modal-edit-trip').classList.add('show');
   } catch(e) {
     toast('Error: ' + e.message);
@@ -4169,6 +4179,25 @@ async function saveEditTrip() {
     });
   }
 
+  // Toggle pendiente de cobro: si cambia, ajustamos payment_status y payments[]
+  const wasPending = oldTrip?.payment_status === 'pending';
+  const nowPending = !!$('et-pending')?.checked;
+  let payment_status = wasPending ? 'pending' : 'paid';
+  let payments = oldTrip?.payments;
+  if (nowPending && !wasPending) {
+    // Ahora pendiente: limpiar payments (la carrera no se cobró aún)
+    payment_status = 'pending';
+    payments = [];
+  } else if (!nowPending && wasPending) {
+    // Antes pendiente, ahora cobrada: crear payment principal con cobro/currency actuales
+    payment_status = 'paid';
+    payments = [{
+      amount: amt, currency, cobro,
+      status: initialPaymentStatus(cobro, source),
+      paid_at: new Date().toISOString()
+    }];
+  }
+
   const updates = {
     source, driverId, driverName,
     amount: amt, currency, cobro,
@@ -4180,18 +4209,15 @@ async function saveEditTrip() {
     netAmount_usd: netUsd ? netUsd.usd : null,
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
+    payment_status,
     modification_history: modHistory
   };
+  if (payments !== undefined) updates.payments = payments;
   try {
-    if (newDate === oldDate) {
-      await fbRef.ref(`trips/${oldDate}/${oldId}`).update(updates);
-    } else {
-      // Cambió la fecha → re-crear con nueva fecha y borrar el viejo
-      const oldSnap = await fbRef.ref(`trips/${oldDate}/${oldId}`).once('value');
-      const merged = { ...oldSnap.val(), ...updates };
-      await fbRef.ref(`trips/${newDate}/${oldId}`).set(merged);
-      await fbRef.ref(`trips/${oldDate}/${oldId}`).remove();
-    }
+    // El campo date se actualiza in-place (PocketBase es flat, no hay path
+    // anidado real). El polyfill encuentra el record por date+trip_id viejo
+    // y le pone los nuevos valores incluyendo la nueva fecha.
+    await fbRef.ref(`trips/${oldDate}/${oldId}`).update(updates);
     toast('Carrera actualizada ✓');
     closeEditTrip();
     // Refrescar la vista activa
