@@ -3910,15 +3910,25 @@ async function loadGPSMap() {
     return;
   }
 
-  // Calcular km totales (filtrando GPS drift: solo cuenta tramos con velocidad > 5 km/h)
+  // Calcular km totales: usamos la geografía + tiempo, no la velocidad
+  // reportada (algunas apps Traccar Client mandan speed=0 o un valor fijo).
+  // Reglas de filtrado:
+  //   - Distancia entre puntos < 8 m → ruido GPS estacionario, ignorar
+  //   - Tiempo entre puntos > 5 min → hubo gap (app cerrada), no sumar
+  //   - Velocidad implícita (distancia/tiempo) > 150 km/h → salto absurdo
   let totalKm = 0;
   for (let i = 1; i < positions.length; i++) {
     const p1 = positions[i-1], p2 = positions[i];
-    const spdKmh = (p2.speed || 0) * 1.852; // nudos → km/h
-    if (spdKmh > 5) {
-      const d = haversineKm(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-      if (d < 2) totalKm += d; // filtrar saltos absurdos
-    }
+    if (!p1 || !p2 || !p1.fixTime || !p2.fixTime) continue;
+    const t1 = new Date(p1.fixTime).getTime();
+    const t2 = new Date(p2.fixTime).getTime();
+    const dtSec = (t2 - t1) / 1000;
+    if (dtSec <= 0 || dtSec > 300) continue;     // gap > 5min: no sumar
+    const distM = haversineKm(p1.latitude, p1.longitude, p2.latitude, p2.longitude) * 1000;
+    if (distM < 8) continue;                      // < 8 m: ruido estacionario
+    const implKmh = (distM / 1000) / (dtSec / 3600);
+    if (implKmh > 150) continue;                  // > 150 km/h: salto GPS
+    totalKm += distM / 1000;
   }
 
   // Línea del recorrido + puntitos
