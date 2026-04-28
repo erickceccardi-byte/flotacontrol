@@ -3094,19 +3094,24 @@ function getTripUsd(trip, field) {
 // donde todo entraba a caja al instante).
 function getTripPayments(trip) {
   if (Array.isArray(trip.payments) && trip.payments.length) return trip.payments;
-  // Sintetizar para retrocompat
+  // Sintetizar para carreras viejas (registradas antes del Lote 11). Por
+  // defecto las dejamos como PENDIENTES de entrega/verificación: nada
+  // entra a caja hasta que admin haga click en "Recibí entrega completa".
+  // Esto refleja el flujo real (el chofer cobra, el admin recibe después)
+  // y evita que el efectivo aparezca como ya entregado.
   if (!trip.amount) return [];
   const cobro = trip.cobro || 'efectivo';
   let status;
   if (cobro === 'billetera' || trip.source === 'nave_billetera') status = 'billetera';
-  else if (cobro === 'transferencia') status = 'verified';   // legacy: ya está en caja
-  else status = 'handed_over';                                // legacy: ya está en caja
+  else if (cobro === 'transferencia') status = 'pending_verification';
+  else status = 'pending_handover';
   return [{
     amount: trip.amount,
     currency: trip.currency || 'CUP',
     cobro,
     status,
-    paid_at: trip.date + 'T' + (trip.time || '00:00') + ':00'
+    paid_at: trip.date + 'T' + (trip.time || '00:00') + ':00',
+    legacy: true  // marcamos que es sintético desde campos viejos
   }];
 }
 
@@ -4759,22 +4764,61 @@ async function markDriverHandover(driverId) {
   if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
   try {
     // Recorrer todas las trips del chofer y actualizar payments con
-    // status='pending_handover' → 'handed_over'.
+    // status='pending_handover' → 'handed_over'. Carreras legacy (sin
+    // payments[] poblado) son tratadas igual: las consideramos como un
+    // único payment efectivo pendiente y al marcar entrega lo populamos
+    // como 'handed_over' en el record (de ahora en más quedan migradas
+    // al modelo nuevo).
     const tSnap = await fbRef.ref('trips').once('value');
     const days = tSnap.val() || {};
     let updated = 0;
+    const nowIso = new Date().toISOString();
     for (const [date, trips] of Object.entries(days)) {
       for (const [tid, t] of Object.entries(trips || {})) {
         if (!t || typeof t !== 'object' || t.driverId !== driverId) continue;
-        const pays = Array.isArray(t.payments) ? t.payments : [];
+        // Solo carreras pagadas (no las pendientes de cobro al cliente)
+        if (t.payment_status === 'pending') continue;
+        // Excluir nave_billetera (no afecta caja)
+        if (t.source === 'nave_billetera' || t.cobro === 'billetera') continue;
+
+        let newPays;
         let changed = false;
-        const newPays = pays.map(p => {
-          if (p && p.status === 'pending_handover') {
-            changed = true;
-            return { ...p, status: 'handed_over', handed_over_at: new Date().toISOString() };
+
+        if (Array.isArray(t.payments) && t.payments.length) {
+          // Modelo nuevo: actualizar payments con status=pending_handover → handed_over
+          newPays = t.payments.map(p => {
+            if (p && p.status === 'pending_handover') {
+              changed = true;
+              return { ...p, status: 'handed_over', handed_over_at: nowIso, legacy: false };
+            }
+            return p;
+          });
+        } else if (t.amount && (t.cobro === 'efectivo' || !t.cobro)) {
+          // Carrera legacy en efectivo: sintetizar payment[] con status handed_over.
+          // De ahora en más esta carrera tendrá payments[] poblado.
+          changed = true;
+          newPays = [{
+            amount: t.amount,
+            currency: t.currency || 'CUP',
+            cobro: 'efectivo',
+            status: 'handed_over',
+            paid_at: t.date + 'T' + (t.time || '00:00') + ':00',
+            handed_over_at: nowIso
+          }];
+          // Si había propina (tipAmount > 0), la sumamos como otro payment
+          if (t.tipAmount && t.tipAmount > 0) {
+            newPays.push({
+              amount: t.tipAmount,
+              currency: t.currency || 'CUP',
+              cobro: 'efectivo',
+              status: 'handed_over',
+              paid_at: t.date + 'T' + (t.time || '00:00') + ':00',
+              handed_over_at: nowIso,
+              is_tip: true
+            });
           }
-          return p;
-        });
+        }
+
         if (changed) {
           await fbRef.ref(`trips/${date}/${tid}`).update({ payments: newPays });
           updated++;
