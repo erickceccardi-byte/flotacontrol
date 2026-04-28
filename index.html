@@ -421,6 +421,13 @@ audio{width:100%;height:36px;margin-top:6px}
   .d-ruta{min-height:42px;padding:5px 7px}
   .d-register{padding:13px;min-height:48px;font-size:15px}
 }
+
+/* Mapa Leaflet (cargado lazy cuando admin abre pestaña GPS) */
+#gps-map{width:100%;height:380px;border-radius:10px;border:1px solid var(--brd);overflow:hidden;background:var(--bg2)}
+.gps-stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.gps-stat-card{background:var(--bg);border:1px solid var(--brd);border-radius:10px;padding:10px 12px;text-align:center}
+.gps-stat-val{font-size:20px;font-weight:700;color:var(--txt)}
+.gps-stat-lbl{font-size:11px;color:var(--txt3);margin-top:2px}
 </style>
 </head>
 <body>
@@ -1041,19 +1048,47 @@ audio{width:100%;height:36px;margin-top:6px}
 
     <!-- GPS -->
     <div class="otab-pane" id="atp-gps">
-      <div class="sh">Conexión Traccar</div>
-      <div class="card">
-        <div class="field"><label>URL servidor</label><input type="url" id="tc-url" placeholder="https://server.traccar.org"></div>
-        <div class="field"><label>Email</label><input type="email" id="tc-email"></div>
-        <div class="field"><label>Contraseña</label><input type="password" id="tc-pass"></div>
-        <button class="btn btnacc" onclick="connTraccar()">Conectar</button>
-        <div id="tc-msg"></div>
+      <!-- Selector de chofer + fecha + botón -->
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+        <select id="gps-chofer" style="flex:1;min-width:120px;padding:9px 10px;border:1px solid var(--brd);border-radius:8px;font-size:13px;font-family:inherit"></select>
+        <input type="date" id="gps-date" style="flex:1;min-width:130px;padding:9px 10px;border:1px solid var(--brd);border-radius:8px;font-size:13px">
+        <button class="btn btnacc" onclick="loadGPSMap()" style="padding:9px 14px">Ver</button>
       </div>
-      <div class="date-row">
-        <input type="date" id="gps-date">
-        <button class="btn" onclick="loadGPS()">Cargar GPS</button>
+
+      <!-- Stats del día -->
+      <div class="gps-stat-grid">
+        <div class="gps-stat-card"><div class="gps-stat-val" id="gps-km">—</div><div class="gps-stat-lbl">Km recorridos</div></div>
+        <div class="gps-stat-card"><div class="gps-stat-val" id="gps-positions">—</div><div class="gps-stat-lbl">Posiciones</div></div>
       </div>
-      <div id="gps-list"><div style="font-size:13px;color:var(--txt3)">Conecta Traccar y selecciona una fecha.</div></div>
+
+      <!-- Mapa -->
+      <div id="gps-map"><div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--txt3);font-size:13px">Cargando mapa…</div></div>
+      <div id="gps-msg" style="font-size:11px;color:var(--txt3);margin-top:6px;text-align:center"></div>
+
+      <!-- Conexión Traccar (colapsable) -->
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--txt2);padding:6px 0;font-weight:500">⚙ Configuración Traccar</summary>
+        <div class="card" style="margin-top:6px">
+          <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+            La PWA usa proxy interno hacia <code>gps.ecocargo.app</code> via <code>ecocargo.app/traccar/api</code> (sin CORS).
+            Solo tenés que ingresar las credenciales del admin Traccar la primera vez.
+          </div>
+          <div class="field"><label>URL servidor (proxy)</label><input type="url" id="tc-url" value="https://ecocargo.app/traccar"></div>
+          <div class="field"><label>Email</label><input type="email" id="tc-email"></div>
+          <div class="field"><label>Contraseña</label><input type="password" id="tc-pass"></div>
+          <button class="btn btnacc" onclick="connTraccar()">Conectar / Actualizar</button>
+          <div id="tc-msg" style="margin-top:6px"></div>
+        </div>
+
+        <!-- Mapeo de dispositivos a choferes -->
+        <div class="sh" style="margin-top:14px">Mapear dispositivos a choferes</div>
+        <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+          Cada chofer en FlotaControl se vincula con un dispositivo Traccar. Yoan ya está vinculado al identificador <code>84290474</code>.
+        </div>
+        <div id="gps-map-list"><div style="font-size:13px;color:var(--txt3)">Conecta Traccar para ver los dispositivos.</div></div>
+        <button class="btn" onclick="saveGPSMap()" style="margin-top:10px">Guardar mapeo</button>
+      </details>
+
       <div class="spacer"></div>
     </div>
 
@@ -1425,13 +1460,17 @@ function cleanupDuplicateDrivers() {
 }
 
 // Migra silenciosamente la URL de Traccar guardada en config si tiene la
-// URL vieja de demo. Cuenta oficial server.traccar.org (subscripción).
+// Auto-migración de URLs viejas de Traccar a nuestro proxy interno
+// (ecocargo.app/traccar → 127.0.0.1:8082 via Caddy, sin CORS).
 function migrateTraccarUrl() {
   try {
     const cfg = getCfg();
-    if (cfg.traccar && typeof cfg.traccar.url === 'string' && cfg.traccar.url.includes('demo.traccar.org')) {
-      cfg.traccar.url = 'https://server.traccar.org';
-      setCfg(cfg);
+    if (cfg.traccar && typeof cfg.traccar.url === 'string') {
+      const oldUrls = ['demo.traccar.org', 'server.traccar.org'];
+      if (oldUrls.some(u => cfg.traccar.url.includes(u))) {
+        cfg.traccar.url = 'https://ecocargo.app/traccar';
+        setCfg(cfg);
+      }
     }
   } catch(e) {}
 }
@@ -2116,6 +2155,7 @@ function showATab(name, el) {
   if (name === 'pendientes') loadPendientes();
   if (name === 'caja') loadCaja();
   if (name === 'choferes') renderDriverMgmt();
+  if (name === 'gps') initGpsTab();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
 }
 
@@ -3731,6 +3771,201 @@ async function loadGPS() {
     </div></div>`;
   }
   list.innerHTML = html || '<div style="font-size:13px;color:var(--txt3)">Sin datos GPS para esta fecha.</div>';
+}
+
+// ════════════════════════════════════════
+// MAPA GPS (Leaflet) — pestaña GPS admin
+// ════════════════════════════════════════
+let gpsLeafletMap = null;
+let gpsLeafletLayer = null;     // grupo de marcadores y polyline
+let gpsLeafletReady = false;
+
+// Carga Leaflet desde CDN una sola vez
+async function loadLeaflet() {
+  if (gpsLeafletReady) return true;
+  if (window.L) { gpsLeafletReady = true; return true; }
+  return new Promise(res => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const sc = document.createElement('script');
+    sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    sc.onload = () => { gpsLeafletReady = true; res(true); };
+    sc.onerror = () => res(false);
+    document.head.appendChild(sc);
+  });
+}
+
+// Inicializa la pestaña GPS la primera vez (carga choferes en select, set hoy)
+function initGpsTab() {
+  // Cargar choferes en el select
+  const sel = $('gps-chofer');
+  if (sel) {
+    const drvs = getDrivers().filter(d => d.id !== 'd004'); // omitir prueba
+    sel.innerHTML = drvs.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    // Default: Yoan (si existe), si no el primero
+    const yoan = drvs.find(d => d.id === 'd005');
+    sel.value = yoan ? 'd005' : (drvs[0]?.id || '');
+  }
+  // Default: hoy
+  if ($('gps-date') && !$('gps-date').value) $('gps-date').value = todayStr();
+  // Auto-conectar Traccar si hay credenciales
+  const cfg = getCfg();
+  if (cfg.traccar && cfg.traccar.email && cfg.traccar.pass && !tcConn) {
+    connTraccar().then(() => loadGPSMap()).catch(()=>{});
+  } else if (tcConn) {
+    loadGPSMap();
+  }
+}
+
+// Mapeo chofer ↔ deviceId Traccar.
+// Yoan está vinculado al identifier "84290474" por default si no hay mapeo manual.
+const DEFAULT_GPS_MAP = { 'd005': '84290474' }; // driverId → uniqueId Traccar
+function getGpsMapping() {
+  const cfg = getCfg();
+  return { ...DEFAULT_GPS_MAP, ...((cfg.gpsMap || {})) };
+}
+
+// Encuentra el deviceId de Traccar (no uniqueId) para un chofer dado
+function findTraccarDeviceId(driverId) {
+  const map = getGpsMapping();
+  const uniqueId = map[driverId];
+  if (!uniqueId) return null;
+  if (!Array.isArray(tcDevices)) return null;
+  const dev = tcDevices.find(d => String(d.uniqueId) === String(uniqueId));
+  return dev ? dev.id : null;
+}
+
+// Distancia haversine entre dos puntos (km)
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+// Carga y dibuja el recorrido del chofer en el mapa
+async function loadGPSMap() {
+  const driverId = $('gps-chofer')?.value;
+  const date = $('gps-date')?.value || todayStr();
+  const msgEl = $('gps-msg');
+  const kmEl = $('gps-km');
+  const posEl = $('gps-positions');
+
+  if (msgEl) msgEl.textContent = 'Cargando…';
+
+  // Verificar conexión Traccar
+  if (!tcConn) {
+    if (msgEl) msgEl.innerHTML = '<span style="color:var(--re)">⚠ Conectá Traccar primero (engranaje abajo)</span>';
+    return;
+  }
+  const traccarDevId = findTraccarDeviceId(driverId);
+  if (!traccarDevId) {
+    if (msgEl) msgEl.innerHTML = `<span style="color:var(--am)">⚠ El chofer no está vinculado a un dispositivo Traccar.<br>Abrí el engranaje abajo y mapealo.</span>`;
+    if (kmEl) kmEl.textContent = '—'; if (posEl) posEl.textContent = '—';
+    return;
+  }
+
+  // Cargar Leaflet
+  const ok = await loadLeaflet();
+  if (!ok) { if (msgEl) msgEl.textContent = 'No se pudo cargar el mapa'; return; }
+
+  // Inicializar mapa si no existe
+  if (!gpsLeafletMap) {
+    gpsLeafletMap = L.map('gps-map').setView([23.1136, -82.3666], 12); // La Habana default
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap',
+      maxZoom: 19
+    }).addTo(gpsLeafletMap);
+    gpsLeafletLayer = L.layerGroup().addTo(gpsLeafletMap);
+  } else {
+    gpsLeafletLayer.clearLayers();
+  }
+
+  // Pedir posiciones a Traccar API via /traccar (proxy Caddy)
+  const cfg = getCfg();
+  const from = `${date}T00:00:00.000Z`;
+  const to   = `${date}T23:59:59.999Z`;
+  const url  = `${cfg.traccar.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const headers = {
+    'Authorization': 'Basic ' + btoa(cfg.traccar.email + ':' + cfg.traccar.pass),
+    'Accept': 'application/json'
+  };
+  let positions;
+  try {
+    const r = await fetch(url, { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    positions = await r.json();
+  } catch(e) {
+    if (msgEl) msgEl.innerHTML = '<span style="color:var(--re)">Error: ' + e.message + '</span>';
+    return;
+  }
+
+  if (!positions || !positions.length) {
+    if (msgEl) msgEl.textContent = 'Sin posiciones registradas para esta fecha.';
+    if (kmEl) kmEl.textContent = '0';
+    if (posEl) posEl.textContent = '0';
+    return;
+  }
+
+  // Calcular km totales (filtrando GPS drift: solo cuenta tramos con velocidad > 5 km/h)
+  let totalKm = 0;
+  for (let i = 1; i < positions.length; i++) {
+    const p1 = positions[i-1], p2 = positions[i];
+    const spdKmh = (p2.speed || 0) * 1.852; // nudos → km/h
+    if (spdKmh > 5) {
+      const d = haversineKm(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+      if (d < 2) totalKm += d; // filtrar saltos absurdos
+    }
+  }
+
+  // Línea del recorrido + puntitos
+  const path = positions.map(p => [p.latitude, p.longitude]);
+  L.polyline(path, { color: '#4682B4', weight: 3, opacity: 0.5 }).addTo(gpsLeafletLayer);
+
+  // Cada N puntos un marker (no dibujar los 1000+ puntos como markers, sería lentísimo)
+  const stride = Math.max(1, Math.floor(positions.length / 100));
+  for (let i = 0; i < positions.length; i += stride) {
+    const p = positions[i];
+    const marker = L.circleMarker([p.latitude, p.longitude], {
+      radius: 4, color: '#1a4d7e', weight: 1, fillColor: '#4682B4', fillOpacity: 0.85
+    }).addTo(gpsLeafletLayer);
+    const fixTime = new Date(p.fixTime || p.deviceTime || p.serverTime);
+    const hora = fixTime.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const spdKmh = Math.round((p.speed || 0) * 1.852);
+    marker.bindPopup(`
+      <div style="font-family:system-ui;font-size:13px">
+        <div style="font-weight:600">${hora}</div>
+        <div style="font-size:11px;color:#666">Velocidad: ${spdKmh} km/h</div>
+        <div style="font-size:10px;color:#999">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}</div>
+      </div>`);
+  }
+  // Punto inicial verde, punto final rojo
+  const first = positions[0], last = positions[positions.length - 1];
+  L.circleMarker([first.latitude, first.longitude], {radius:7, color:'#1a7a1a', fillColor:'#4ade80', fillOpacity:1, weight:2}).addTo(gpsLeafletLayer).bindPopup('<strong>Inicio</strong> ' + new Date(first.fixTime).toLocaleTimeString('es'));
+  if (positions.length > 1) {
+    L.circleMarker([last.latitude, last.longitude], {radius:7, color:'#7a1a1a', fillColor:'#ef4444', fillOpacity:1, weight:2}).addTo(gpsLeafletLayer).bindPopup('<strong>Fin</strong> ' + new Date(last.fixTime).toLocaleTimeString('es'));
+  }
+
+  // Ajustar vista del mapa al recorrido
+  gpsLeafletMap.fitBounds(L.polyline(path).getBounds(), { padding: [20, 20], maxZoom: 17 });
+  setTimeout(() => gpsLeafletMap.invalidateSize(), 100);
+
+  // Stats
+  if (kmEl) kmEl.textContent = (Math.round(totalKm * 10) / 10).toLocaleString('es') + ' km';
+  if (posEl) posEl.textContent = positions.length.toLocaleString('es');
+  if (msgEl) msgEl.textContent = `${positions.length} posiciones · click en cualquier punto para ver la hora`;
+
+  // Guardar km en cache para que Resumen / Detalle lo use
+  if (!gpsCache[date]) gpsCache[date] = {};
+  gpsCache[date][traccarDevId] = {
+    km: Math.round(totalKm * 10) / 10,
+    stops: 0, vmax: 0,
+    name: $('gps-chofer').options[$('gps-chofer').selectedIndex]?.text || '',
+    driverId
+  };
 }
 
 // ════════════════════════════════════════
