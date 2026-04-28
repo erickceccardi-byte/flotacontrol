@@ -487,7 +487,7 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
         <div class="dcbtn" id="cb-cinco" onclick="selCanal('cinco')">
           <div class="dcdot cinco"></div>
-          <div class="dcname">Cinco</div>
+          <div class="dcname">Marco</div>
           <div class="dccom" id="lbl-cinco">10%</div>
         </div>
         <div class="dcbtn" id="cb-wapp" onclick="selCanal('wapp')">
@@ -689,7 +689,7 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="otab-pane" id="atp-historial">
       <div style="margin-bottom:10px">
         <div style="font-size:13px;color:var(--txt2);margin-bottom:4px">Resumen por chofer</div>
-        <div style="font-size:11px;color:var(--txt3)">Día = jornada actual (04:00–04:00) · Semana = últimos 7 días · Mes = últimos 30 días</div>
+        <div style="font-size:11px;color:var(--txt3)">Día = calendario (00:00–24:00) · Semana = últimos 7 días · Mes = últimos 30 días</div>
       </div>
       <div class="hist-table-wrap" style="overflow-x:auto;background:var(--bg);border:1px solid var(--brd);border-radius:10px">
         <table id="hist-table" style="width:100%;border-collapse:collapse;font-size:12px">
@@ -948,11 +948,13 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-pending-handover"></div>
 
-      <div class="sh">Transferencias por verificar</div>
+      <div class="sh">Transferencias por verificar <span id="caja-pending-verify-count" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
-        Transferencias recibidas pero no marcadas como verificadas. Sirven para confirmación posterior con el banco.
+        Transferencias en caja pendientes de confirmación con el banco. Lista deslizable.
       </div>
-      <div id="caja-pending-verify"></div>
+      <div id="caja-pending-verify" class="card" style="max-height:300px;overflow-y:auto;padding:0">
+        <div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin transferencias pendientes.</div>
+      </div>
 
       <div class="sh">Libro de operaciones</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
@@ -1079,7 +1081,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="card">
         <div class="g2">
           <div class="field"><label>La Nave (%)</label><input type="number" id="cfg-nave" value="20" min="0" max="100"></div>
-          <div class="field"><label>Cinco (%)</label><input type="number" id="cfg-cinco" value="10" min="0" max="100"></div>
+          <div class="field"><label>Marco (%)</label><input type="number" id="cfg-cinco" value="10" min="0" max="100"></div>
           <div class="field"><label>WhatsApp (%)</label><input type="number" id="cfg-wapp" value="10" min="0" max="100"></div>
           <div class="field"><label>Directa (%)</label><input type="number" value="0" readonly></div>
         </div>
@@ -1235,6 +1237,40 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: GASTO DEL CHOFER ═══════════ -->
+<div id="modal-gasto" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Registrar gasto</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      El gasto se descuenta del dinero pendiente que tenés que entregar al admin.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input type="number" id="gst-amount" placeholder="Monto" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="gst-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="CUP">CUP</option>
+        <option value="USD">USD</option>
+        <option value="EUR">EUR</option>
+      </select>
+      <select id="gst-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transfer</option>
+      </select>
+    </div>
+    <select id="gst-categoria" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+      <option value="combustible">Combustible / carga eléctrica</option>
+      <option value="comidas">Comida del chofer</option>
+      <option value="peaje-parqueo">Peaje / parqueo</option>
+      <option value="mantenimiento">Mantenimiento</option>
+      <option value="otros">Otros</option>
+    </select>
+    <input type="text" id="gst-concepto" placeholder="Concepto (opcional)" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeGastoModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveGasto()">Registrar gasto</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: EDITAR CARRERA (admin) ═══════════ -->
 <div id="modal-edit-trip" class="dmodal">
   <div class="dmodal-card" style="max-width:480px">
@@ -1245,7 +1281,7 @@ audio{width:100%;height:36px;margin-top:6px}
     <div style="display:flex;gap:6px;margin-bottom:6px">
       <select id="et-source" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
         <option value="directo">Directa</option>
-        <option value="cinco">Cinco</option>
+        <option value="cinco">Marco</option>
         <option value="wapp">WhatsApp</option>
         <option value="nave">La Nave</option>
         <option value="nave_billetera">Nave Billetera</option>
@@ -1335,7 +1371,7 @@ const VEHICULOS = [
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
-const SRC = { nave:'La Nave', cinco:'Cinco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera' };
+const SRC = { nave:'La Nave', cinco:'Marco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera' };
 const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave' };
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
@@ -2183,10 +2219,8 @@ async function loadHistorial() {
     dates30.push(ds);
     if (i < 7) dates7.push(ds);
   }
-  // Para "hoy" jornada operativa 04:00→04:00, leemos también hoy y mañana
-  // si ya pasaron las 4 AM.
-  const todayPlus1 = new Date(today); todayPlus1.setDate(todayPlus1.getDate() + 1);
-  const datesToday = [todayStr_, ymdLocal(todayPlus1)];
+  // Día calendario (00:00–24:00). Sin ventana operacional especial.
+  const datesToday = [todayStr_];
 
   // Traer trips de los últimos 30 días (cubre día y semana también)
   let allTrips = [];
@@ -2213,17 +2247,10 @@ async function loadHistorial() {
     }
   }
 
-  // Helpers para detectar si un trip cae en una ventana operativa 04:00-04:00
+  // Día calendario simple: trip.date === dayYmd. (Antes había ventana
+  // operativa 04:00–04:00; ahora 00:00–24:00 según pidió el admin.)
   function inOperationalDay(trip, dayYmd) {
-    // dayYmd = "2026-04-25" → operativo de 04:00 día → 04:00 día+1
-    if (!trip || !trip.date || !trip.time) return false;
-    const [hh] = trip.time.split(':').map(Number);
-    if (trip.date === dayYmd && hh >= 4) return true;
-    // Día siguiente antes de las 4
-    const next = new Date(dayYmd); next.setDate(next.getDate() + 1);
-    const nextStr = ymdLocal(next);
-    if (trip.date === nextStr && hh < 4) return true;
-    return false;
+    return !!(trip && trip.date === dayYmd);
   }
 
   function inLast7Days(trip) {
@@ -2304,25 +2331,17 @@ function populateDetDriverSelect() {
 }
 
 function getDetalleDateRange() {
-  // Devuelve { start: Date, end: Date, label, dates: [YYYY-MM-DD] } según detPeriod.
-  // Para 'day' usamos jornada operativa 04:00-04:00 hora local del dispositivo.
+  // Devuelve { label, dates: [YYYY-MM-DD], filter } según detPeriod.
+  // Día = calendario 00:00–24:00 (sin ventana operativa).
   const now = new Date();
   if (detPeriod === 'day') {
     const today = new Date(now); today.setHours(0,0,0,0);
     const todayStr_ = ymdLocal(today);
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
     const label = today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'});
     return {
       label,
-      dates: [todayStr_, ymdLocal(tomorrow)],
-      filter: t => {
-        if (!t.date || !t.time) return false;
-        const [hh] = (t.time||'00:00').split(':').map(Number);
-        if (t.date === todayStr_ && hh >= 4) return true;
-        const nextStr = ymdLocal(tomorrow);
-        if (t.date === nextStr && hh < 4) return true;
-        return false;
-      }
+      dates: [todayStr_],
+      filter: t => t && t.date === todayStr_
     };
   }
   const days = detPeriod === 'week' ? 7 : 30;
@@ -2762,18 +2781,39 @@ async function regTrip() {
   const tip = (total > amt) ? (total - amt) : 0;
 
   const currency = document.getElementById('f-currency')?.value || 'CUP';
-  // Comisión y neto se calculan SOBRE EL MONTO DE LA CARRERA, no sobre total.
-  // La propina NO entra en bruto/neto/comisión. Se guarda aparte.
-  const r = getCom(selCan), com = Math.round(amt*r/100), net = amt-com;
   const t = todayStr();
   const pax = parseInt($('f-pax')?.value || '1', 10);
 
-  // Congelar equivalente USD usando tasa del momento. Si no hay tasa,
-  // queda null y la skill de reportes hará fallback al config.
-  const amtUsd = convertToUsd(amt, currency);
-  const comUsd = convertToUsd(com, currency);
-  const netUsd = convertToUsd(net, currency);
+  // Comisión y neto se calculan SOBRE EL TOTAL BRUTO COBRADO al cliente
+  // (monto principal + extras en otras monedas). La propina sigue siendo
+  // aparte (no entra en bruto/neto/comisión).
+  // Para el cálculo en USD canónico sumamos todo convertido.
+  const amtUsdObj = convertToUsd(amt, currency);
   const tipUsd = tip > 0 ? convertToUsd(tip, currency) : null;
+  let brutoUsdTotal = amtUsdObj ? amtUsdObj.usd : 0;
+  if (Array.isArray(window._extraPayments)) {
+    for (const ep of window._extraPayments) {
+      if (!ep || !ep.amount) continue;
+      if ((ep.currency || 'CUP').toUpperCase() === 'USD') {
+        brutoUsdTotal += ep.amount;
+      } else {
+        const epUsd = convertToUsd(ep.amount, ep.currency || 'CUP');
+        if (epUsd) brutoUsdTotal += epUsd.usd;
+      }
+    }
+  }
+
+  const r = getCom(selCan);
+  // Comisión nominal en moneda principal (display compat con código viejo)
+  const com = Math.round(amt*r/100), net = amt-com;
+  // Comisión REAL en USD = sobre el bruto total (multi-moneda)
+  const commUsdTotal = Math.round(brutoUsdTotal * r) / 100;
+  const netUsdTotal = Math.round((brutoUsdTotal - commUsdTotal) * 100) / 100;
+  // amtUsd (display) = amt convertido nada más (sin extras). Para el total
+  // bruto consolidado se usa brutoUsdTotal (campo nuevo).
+  const amtUsd = amtUsdObj;
+  const comUsd = { usd: commUsdTotal, rate_used: amtUsdObj?.rate_used, rate_date: amtUsdObj?.rate_date };
+  const netUsd = { usd: netUsdTotal, rate_used: amtUsdObj?.rate_used, rate_date: amtUsdObj?.rate_date };
 
   // ── Construir array de pagos (multi-denominación) ──────────────────
   // Si la carrera está marcada como "pendiente de cobro": array vacío y
@@ -2837,6 +2877,9 @@ async function regTrip() {
     netAmount_usd: netUsd ? netUsd.usd : null,
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
+    // Bruto total cobrado al cliente (monto principal + extras), en USD.
+    // La comisión y el neto van calculados sobre ESTE total.
+    bruto_total_usd: Math.round(brutoUsdTotal * 100) / 100,
     cobro: selCobroType,
     // Pagos multi-denominación + estado de cobro de la carrera
     payments,
@@ -2955,14 +2998,61 @@ async function loadDriverTrips() {
     $('drv-foot-net').textContent = netoToShow ? fmtFn(netoToShow) : '—';
   }
 
-  // Lista detallada (en el bottom sheet)
+  // Lista detallada en el bottom sheet: carreras de los últimos 7 días
+  // del chofer, agrupadas por día calendario. Cada carrera tiene botón
+  // "editar" si todavía no fue entregada al admin.
   const el = $('drv-trips');
   if (el) {
-    if (!mine.length) {
+    let allMine = [];
+    const todayD = new Date(); todayD.setHours(0,0,0,0);
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(todayD); d.setDate(d.getDate() - i);
+      const ds = ymdLocal(d);
+      try { allMine = allMine.concat(await dbGetTripsByDate(ds)); } catch(e) {}
+    }
+    // Completar desde PB
+    if (fbRef && isOnline) {
+      const localIds = new Set(allMine.map(t => t.id));
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(todayD); d.setDate(d.getDate() - i);
+        const ds = ymdLocal(d);
+        try {
+          const snap = await fbRef.ref('trips/' + ds).once('value');
+          for (const ft of Object.values(snap.val() || {})) {
+            if (ft && typeof ft === 'object' && ft.driverId === currentUser.id && !localIds.has(ft.id)) {
+              allMine.push(ft);
+              localIds.add(ft.id);
+            }
+          }
+        } catch(e) {}
+      }
+    }
+    allMine = allMine.filter(r => r && r.driverId === currentUser.id);
+
+    if (!allMine.length) {
       el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>';
     } else {
-      // Chofer ya NO puede borrar sus carreras (decisión de control: solo admin).
-      el.innerHTML = mine.map(r => tripHTML(r, false)).join('');
+      // Agrupar por día (descendente)
+      const byDay = {};
+      allMine.forEach(r => {
+        const d = r.date || 'sin-fecha';
+        (byDay[d] = byDay[d] || []).push(r);
+      });
+      const todayStr_ = ymdLocal(todayD);
+      const yesterdayD = new Date(todayD); yesterdayD.setDate(yesterdayD.getDate() - 1);
+      const yesterdayStr = ymdLocal(yesterdayD);
+      const dayLabel = (d) => {
+        if (d === todayStr_) return 'Hoy';
+        if (d === yesterdayStr) return 'Ayer';
+        try { return new Date(d + 'T00:00:00').toLocaleDateString('es', {weekday:'long', day:'numeric', month:'short'}); }
+        catch(e) { return d; }
+      };
+      const sortedDays = Object.keys(byDay).sort().reverse();
+      el.innerHTML = sortedDays.map(d => {
+        const list = byDay[d].sort((a,b) => (b.time||'').localeCompare(a.time||''));
+        return `<div style="margin-top:10px;font-size:11px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:4px 0">${dayLabel(d)} <span style="color:var(--brd2);font-weight:400">· ${d}</span></div>`
+          + list.map(r => tripHTML(r, false)).join('');
+      }).join('');
     }
   }
 
@@ -3340,10 +3430,24 @@ function tripHTML(r, showDel) {
     ? '<span class="cobro-tag ct-trans">📲 Transferencia</span>'
     : '';
   const syncTag = r.synced ? '<span class="badge b-synced" style="font-size:9px">✓ sync</span>' : '<span class="badge b-sync" style="font-size:9px">⏳ local</span>';
-  // Admin: botón editar + eliminar. Chofer: solo eliminar.
+  // Botones contextuales:
+  // - Admin siempre: editar + eliminar
+  // - Chofer: editar SOLO si la carrera es suya y aún no fue entregada (handed_over)
+  //   El chofer NO puede eliminar (solo admin)
   const isAdmin = currentUser && currentUser.role === 'admin';
-  const editBtn = (showDel && isAdmin) ? `<div class="ti-del" style="color:var(--txt2);cursor:pointer;font-size:11px" onclick="openEditTrip('${r.id}','${r.date}')">editar</div>` : '';
-  const del = showDel ? `<div class="ti-del" onclick="delTrip('${r.id}','${r.date}')">eliminar</div>` : '';
+  const isOwnDriver = currentUser && currentUser.role === 'driver' && r.driverId === currentUser.id;
+  // ¿Está la carrera ya entregada? Si todos los payments están handed_over/verified, sí.
+  const pays = (r.payments && r.payments.length) ? r.payments : null;
+  const yaEntregada = pays ? pays.every(p =>
+    p && (p.status === 'handed_over' || p.status === 'verified' || p.status === 'billetera')
+  ) : false;
+  const choferPuedeEditar = isOwnDriver && !yaEntregada && r.payment_status !== 'pending';
+  const showEdit = (showDel && isAdmin) || choferPuedeEditar;
+  const editBtn = showEdit ? `<div class="ti-del" style="color:var(--txt2);cursor:pointer;font-size:11px" onclick="openEditTrip('${r.id}','${r.date}')">editar</div>` : '';
+  const del = (showDel && isAdmin) ? `<div class="ti-del" onclick="delTrip('${r.id}','${r.date}')">eliminar</div>` : '';
+  // Badge "modificada" si tiene historial de cambios
+  const modBadge = (r.modification_history && r.modification_history.length)
+    ? `<span class="badge" style="font-size:9px;background:var(--ambg);color:var(--am);border:1px solid var(--ambrd)">✎ modificada</span>` : '';
   const audioHTML = r.audioB64 && r.audioB64 !== '[audio-local-only]'
     ? `<div class="ti-audio"><audio controls src="${r.audioB64}" style="width:100%;height:32px"></audio></div>` : '';
   return `<div class="trip-item">
@@ -3353,6 +3457,7 @@ function tripHTML(r, showDel) {
         ${cobroTag}
         <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
         ${syncTag}
+        ${modBadge}
         ${r.vehiculoName ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">🚗 ${r.vehiculoName}</span>` : ''}
         ${r.pasajeros && r.pasajeros > 1 ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">👥 ${r.pasajeros}</span>` : ''}
       </div>
@@ -3659,7 +3764,7 @@ GPS (Traccar):\n${gpsL}\n\nIngresos por conductor:\n${incL}
 
 Totales: ${Math.round(bruto).toLocaleString()} bruto · ${Math.round(com).toLocaleString()} comisiones · ${Math.round(neto).toLocaleString()} neto · ${totalKm} km · ${cpm} CUP/km · ${trips.length} carreras
 
-Contexto: autos eléctricos, radio 170km desde La Habana. Comisiones: La Nave ${comm.nave||20}%, Cinco ${comm.cinco||10}%, WhatsApp ${comm.wapp||10}%, Directas 0%. Se registra si el cobro fue en efectivo o transferencia.
+Contexto: autos eléctricos, radio 170km desde La Habana. Comisiones: La Nave ${comm.nave||20}%, Marco ${comm.cinco||10}%, WhatsApp ${comm.wapp||10}%, Directas 0%. Se registra si el cobro fue en efectivo o transferencia.
 
 Dame:
 1. Rendimiento general del día (2 líneas)
@@ -3846,21 +3951,54 @@ async function loadDriverPendingAcumulado() {
         }
       });
     });
-    if (!count) {
+    // Restar gastos pendientes del chofer
+    const gastos = await fetchPendingGastosOfDriver(currentUser.id);
+    let gastosTotalUsd = 0;
+    gastos.forEach(g => {
+      const cur = (g.currency || 'CUP').toUpperCase();
+      if (!byCur[cur]) byCur[cur] = { efectivo: 0, transferencia: 0 };
+      byCur[cur][g.cobro || 'efectivo'] -= (g.amount || 0);
+      if (cur === 'USD') gastosTotalUsd += g.amount;
+      else if (fxCache) {
+        const v = convertToUsd(g.amount, cur);
+        if (v) gastosTotalUsd += v.usd;
+      }
+    });
+    const netUsd = totalUsd - gastosTotalUsd;
+    if (!count && !gastos.length) {
       card.style.display = 'none';
       return;
     }
     card.style.display = 'block';
-    totalEl.textContent = totalUsd ? '≈ $' + totalUsd.toFixed(2) + ' USD' : '';
-    listEl.innerHTML = Object.entries(byCur).map(([cur, forms]) => {
-      const lines = [];
-      if (forms.efectivo > 0) lines.push(`💵 ${Math.round(forms.efectivo).toLocaleString('es')} ${cur}`);
-      if (forms.transferencia > 0) lines.push(`📲 ${Math.round(forms.transferencia).toLocaleString('es')} ${cur}`);
-      return lines.join(' · ');
-    }).join('<br>');
+    totalEl.textContent = '≈ $' + netUsd.toFixed(2) + ' USD a entregar';
+    let html = Object.entries(byCur)
+      .filter(([_,forms]) => forms.efectivo !== 0 || forms.transferencia !== 0)
+      .map(([cur, forms]) => {
+        const lines = [];
+        if (forms.efectivo !== 0) lines.push(`💵 ${Math.round(forms.efectivo).toLocaleString('es')} ${cur}`);
+        if (forms.transferencia !== 0) lines.push(`📲 ${Math.round(forms.transferencia).toLocaleString('es')} ${cur}`);
+        return lines.join(' · ');
+      }).join('<br>');
+    if (gastos.length) {
+      const fmtCat = (id) => GASTO_CATS[id] || id;
+      const gastoLines = gastos.map(g => `<div style="font-size:10px;color:var(--re);margin-top:2px">− ${Math.round(g.amount).toLocaleString('es')} ${g.currency} ${g.cobro==='transferencia'?'📲':'💵'} · ${fmtCat(g.categoria)}${g.concepto ? ' · ' + g.concepto : ''} <button onclick="deleteGasto('${g.gasto_id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:11px;padding:0 2px">✕</button></div>`).join('');
+      html += '<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--ambrd)"><div style="font-size:10px;color:var(--am);font-weight:600">Gastos pendientes:</div>' + gastoLines + '</div>';
+    }
+    html += '<button onclick="openGastoModal()" style="margin-top:8px;width:100%;padding:7px;background:transparent;border:1px dashed var(--am);border-radius:6px;color:var(--am);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Registrar gasto</button>';
+    listEl.innerHTML = html;
   } catch(e) {
     console.warn('pending acumulado error', e);
   }
+}
+
+async function deleteGasto(gastoId) {
+  if (!confirm('¿Eliminar este gasto?')) return;
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`gastos_chofer/${gastoId}`).remove();
+    toast('Gasto eliminado');
+    loadDriverPendingAcumulado();
+  } catch(e) { toast('Error: ' + e.message); }
 }
 function closeHoySheet() {
   $('sheet-hoy').classList.remove('show');
@@ -3890,6 +4028,70 @@ function saveDescModal() {
     }
   });
   closeDescModal();
+}
+
+// ════════════════════════════════════════
+// GASTOS DEL CHOFER
+// ════════════════════════════════════════
+const GASTO_CATS = {
+  'combustible':    'Combustible / carga eléctrica',
+  'comidas':        'Comida del chofer',
+  'peaje-parqueo':  'Peaje / parqueo',
+  'mantenimiento':  'Mantenimiento',
+  'otros':          'Otros'
+};
+
+function openGastoModal() {
+  if (!currentUser || currentUser.role !== 'driver') { toast('Solo choferes'); return; }
+  if ($('gst-amount')) $('gst-amount').value = '';
+  if ($('gst-currency')) $('gst-currency').value = 'CUP';
+  if ($('gst-cobro')) $('gst-cobro').value = 'efectivo';
+  if ($('gst-categoria')) $('gst-categoria').value = 'combustible';
+  if ($('gst-concepto')) $('gst-concepto').value = '';
+  $('modal-gasto').classList.add('show');
+  setTimeout(() => $('gst-amount')?.focus(), 100);
+}
+function closeGastoModal() { $('modal-gasto').classList.remove('show'); }
+async function saveGasto() {
+  if (!currentUser || currentUser.role !== 'driver') return;
+  const amt = parseFloat($('gst-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('gst-currency').value;
+  const cobro = $('gst-cobro').value;
+  const categoria = $('gst-categoria').value;
+  const concepto = $('gst-concepto').value.trim();
+  const usd = convertToUsd(amt, currency);
+  const gasto = {
+    gasto_id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    driverId: currentUser.id,
+    driverName: currentUser.name,
+    amount: amt, currency, cobro,
+    amount_usd: usd ? usd.usd : null,
+    fx_rate_used: usd ? usd.rate_used : null,
+    categoria, concepto,
+    date: todayStr(), time: nowT(),
+    created_at: new Date().toISOString(),
+    status: 'pending', reconciled_at: '', reconciled_by: ''
+  };
+  if (!fbRef || !isOnline) { toast('Sin conexión — el gasto requiere internet'); return; }
+  try {
+    await fbRef.ref(`gastos_chofer/${gasto.gasto_id}`).set(gasto);
+    toast(`Gasto registrado: ${Math.round(amt).toLocaleString('es')} ${currency}`);
+    closeGastoModal();
+    loadDriverPendingAcumulado();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+// Trae los gastos del chofer actual con status='pending'
+async function fetchPendingGastosOfDriver(driverId) {
+  if (!fbRef || !isOnline) return [];
+  try {
+    const snap = await fbRef.ref('gastos_chofer').once('value');
+    const all = Object.values(snap.val() || {});
+    return all.filter(g => g && g.driverId === driverId && g.status === 'pending');
+  } catch(e) { return []; }
 }
 
 // ════════════════════════════════════════
@@ -3944,6 +4146,29 @@ async function saveEditTrip() {
   const comUsd = convertToUsd(com, currency);
   const netUsd = convertToUsd(net, currency);
 
+  // Audit trail: snapshot del trip viejo para comparar y guardar diff
+  let modHistory = [];
+  let oldTrip = null;
+  try {
+    const oldSnap = await fbRef.ref(`trips/${oldDate}/${oldId}`).once('value');
+    oldTrip = oldSnap.val() || {};
+    modHistory = Array.isArray(oldTrip.modification_history) ? [...oldTrip.modification_history] : [];
+  } catch(e) {}
+  const newVals = { source, driverId, amount: amt, currency, cobro, date: newDate, time: newTime, desc: $('et-desc').value.trim() };
+  const diff = {};
+  for (const k of Object.keys(newVals)) {
+    const ov = oldTrip ? oldTrip[k] : undefined;
+    if (ov !== newVals[k]) diff[k] = { from: ov, to: newVals[k] };
+  }
+  if (Object.keys(diff).length) {
+    modHistory.push({
+      at: new Date().toISOString(),
+      by: currentUser ? `${currentUser.role}:${currentUser.id}` : 'unknown',
+      by_name: currentUser ? currentUser.name : '',
+      changes: diff
+    });
+  }
+
   const updates = {
     source, driverId, driverName,
     amount: amt, currency, cobro,
@@ -3954,7 +4179,8 @@ async function saveEditTrip() {
     commAmount_usd: comUsd ? comUsd.usd : null,
     netAmount_usd: netUsd ? netUsd.usd : null,
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
-    fx_rate_date: amtUsd ? amtUsd.rate_date : null
+    fx_rate_date: amtUsd ? amtUsd.rate_date : null,
+    modification_history: modHistory
   };
   try {
     if (newDate === oldDate) {
@@ -4054,21 +4280,13 @@ function getCajaDateRange() {
     return { label: 'Todo', filter: () => true, dates: null };
   }
   if (cajaPeriod === 'day') {
+    // Día calendario (00:00–24:00) — sin ventana operacional.
     const today = new Date(now); today.setHours(0,0,0,0);
     const t = ymdLocal(today);
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
-    const tt = ymdLocal(tomorrow);
     return {
       label: today.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long'}),
-      dates: [t, tt],
-      filter: (item) => {
-        if (!item || !item.date) return false;
-        const time = item.time || (item.paid_at ? item.paid_at.slice(11,16) : '12:00');
-        const [hh] = (time||'12:00').split(':').map(Number);
-        if (item.date === t && hh >= 4) return true;
-        if (item.date === tt && hh < 4) return true;
-        return false;
-      }
+      dates: [t],
+      filter: (item) => item && item.date === t
     };
   }
   const days = cajaPeriod === 'week' ? 7 : 30;
@@ -4210,8 +4428,8 @@ async function delMovimiento(movId) {
   catch(e) { toast('Error: ' + e.message); }
 }
 
-// ── Pagos a canales (La Nave, Cinco, WhatsApp) ──
-const CANAL_NAMES = { nave: 'La Nave', cinco: 'Cinco', wapp: 'WhatsApp' };
+// ── Pagos a canales (La Nave, Marco, WhatsApp) ──
+const CANAL_NAMES = { nave: 'La Nave', cinco: 'Marco', wapp: 'WhatsApp' };
 
 async function registrarPagoCanal(canal) {
   const inp = $(`pcan-${canal}-amt`);
@@ -4428,6 +4646,7 @@ async function loadCaja() {
         aplicarATraza(matriz, p.currency, p.cobro, p.amount);
         pendingTransfers.push({
           trip_id: t.trip_id || t.id, driverId: t.driverId, driverName: t.driverName,
+          source: t.source,
           amount: p.amount, currency: p.currency, cobro: p.cobro,
           date: t.date, time: t.time, payment_index: idx
         });
@@ -4825,46 +5044,85 @@ async function markDriverHandover(driverId) {
         }
       }
     }
-    // Registrar entrega en su colección (audit trail)
+    // Reconciliar gastos pendientes del chofer + crear movimientos de caja
+    let gastosCount = 0, gastoUsdTotal = 0;
+    try {
+      const gSnap = await fbRef.ref('gastos_chofer').once('value');
+      const allG = gSnap.val() || {};
+      for (const [gid, g] of Object.entries(allG)) {
+        if (!g || g.driverId !== driverId || g.status !== 'pending') continue;
+        // Crear movimiento de gasto en caja
+        const mov = {
+          id: 'mov_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+          tipo: 'gasto',
+          categoria: g.categoria || 'otros',
+          amount: g.amount, currency: g.currency, cobro: g.cobro,
+          amount_usd: g.amount_usd, fx_rate_used: g.fx_rate_used,
+          fx_rate_date: '',
+          date: g.date,
+          descripcion: `Gasto chofer ${g.driverName || driverId}: ${g.concepto || g.categoria}`,
+          created_at: nowIso, created_by: currentUser ? currentUser.id : 'admin',
+          from_chofer_gasto: gid
+        };
+        try { await fbRef.ref(`movimientos/${mov.id}`).set(mov); } catch(e) {}
+        // Marcar gasto reconciliado
+        try {
+          await fbRef.ref(`gastos_chofer/${gid}`).update({
+            status: 'reconciled', reconciled_at: nowIso,
+            reconciled_by: currentUser ? currentUser.id : 'admin'
+          });
+        } catch(e) {}
+        gastosCount++;
+        if ((g.currency||'CUP').toUpperCase() === 'USD') gastoUsdTotal += g.amount;
+        else if (typeof g.amount_usd === 'number') gastoUsdTotal += g.amount_usd;
+      }
+    } catch(e) { console.warn('reconcile gastos error', e); }
+
+    // Registrar entrega como evento (audit trail + libro de operaciones)
     const entrega = {
       entrega_id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
       driverId, date: todayStr(),
-      received_at: new Date().toISOString(),
+      received_at: nowIso,
       received_by: currentUser ? currentUser.id : 'admin',
-      trip_ids: [], total_usd: 0, breakdown: {}, note: ''
+      trip_ids: [], total_usd: 0, breakdown: {},
+      gastos_count: gastosCount, gastos_usd: Math.round(gastoUsdTotal*100)/100,
+      note: ''
     };
     try { await fbRef.ref(`entregas/${entrega.entrega_id}`).set(entrega); } catch(e) {}
 
-    toast(`Entrega registrada (${updated} carreras actualizadas)`);
+    toast(`Entrega: ${updated} carreras + ${gastosCount} gasto(s)`);
     loadCaja();
   } catch(e) {
     toast('Error: ' + e.message);
   }
 }
 
-// ── Transferencias por verificar ──
+// ── Transferencias por verificar (card scrolleable estilo libro) ──
 function renderCajaPendingVerify(list) {
   const el = $('caja-pending-verify');
+  const cnt = $('caja-pending-verify-count');
   if (!el) return;
   if (!list || !list.length) {
     el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">No hay transferencias pendientes de verificar.</div>';
+    if (cnt) cnt.textContent = '';
     return;
   }
+  if (cnt) cnt.textContent = `(${list.length} pendientes)`;
   const fmt = n => Math.round(n).toLocaleString('es');
-  // Sort por fecha + hora desc
+  // Sort: más reciente primero
   const sorted = [...list].sort((a,b) =>
     ((b.date||'') + ' ' + (b.time||'')).localeCompare((a.date||'') + ' ' + (a.time||'')));
   el.innerHTML = sorted.map(p => `
-    <div class="card" style="margin-bottom:6px;padding:10px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:18px">📲</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--brd)">
+      <div style="font-size:18px;line-height:1;flex-shrink:0">📲</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:500">${p.driverName || '?'} · ${p.date} ${p.time||''}</div>
-        <div style="font-size:11px;color:var(--txt3)">trip ${(p.trip_id||'').substring(0,18)}</div>
+        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.driverName || '?'} <span style="color:var(--txt3);font-weight:400">· ${SRC[p.source] || ''}</span></div>
+        <div style="font-size:10px;color:var(--txt3)">${p.date} · ${p.time||''}</div>
       </div>
-      <div style="text-align:right;white-space:nowrap;margin-right:6px">
-        <div style="font-weight:600">${fmt(p.amount)} ${p.currency}</div>
+      <div style="text-align:right;white-space:nowrap;flex-shrink:0">
+        <div style="font-weight:600;font-size:14px">${fmt(p.amount)} ${p.currency}</div>
       </div>
-      <button class="btn btnacc" onclick="markPaymentVerified('${p.trip_id}','${p.date}',${p.payment_index})" style="white-space:nowrap;padding:6px 10px;font-size:12px">✓ Verificada</button>
+      <button onclick="markPaymentVerified('${p.trip_id}','${p.date}',${p.payment_index})" style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">✓</button>
     </div>
   `).join('');
 }
