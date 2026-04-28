@@ -1197,7 +1197,7 @@ audio{width:100%;height:36px;margin-top:6px}
   <div class="bsheet-card">
     <div class="bsheet-grip" onclick="closeHoySheet()"></div>
     <div class="bsheet-head">
-      <span class="bsheet-ttl">Hoy <span id="sheet-date" style="color:var(--txt3);font-weight:400"></span></span>
+      <span class="bsheet-ttl">Mis carreras <span id="sheet-date" style="color:var(--txt3);font-weight:400;font-size:12px"></span></span>
       <button class="bsheet-x" onclick="closeHoySheet()">✕</button>
     </div>
     <div class="bsheet-summary">
@@ -2942,9 +2942,41 @@ async function regTrip() {
 }
 
 async function loadDriverTrips() {
-  const t = todayStr();
-  const all = await dbGetTripsByDate(t);
-  const mine = all.filter(r => r.driverId === currentUser.id).sort((a,b) => b.time.localeCompare(a.time));
+  // Cargar TODAS las carreras del chofer de los últimos 7 días (no solo
+  // del día calendario actual). Los totales se calculan sobre las
+  // PENDIENTES DE ENTREGA — eso es lo que le importa al chofer ver
+  // (cuánto debe acumulado hasta la próxima entrega al admin).
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  let all7 = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(todayD); d.setDate(d.getDate() - i);
+    const ds = ymdLocal(d);
+    try { all7 = all7.concat(await dbGetTripsByDate(ds)); } catch(e) {}
+  }
+  if (fbRef && isOnline) {
+    const localIds = new Set(all7.map(t => t.id));
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(todayD); d.setDate(d.getDate() - i);
+      const ds = ymdLocal(d);
+      try {
+        const snap = await fbRef.ref('trips/' + ds).once('value');
+        for (const ft of Object.values(snap.val() || {})) {
+          if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
+            all7.push(ft);
+            localIds.add(ft.id);
+          }
+        }
+      } catch(e) {}
+    }
+  }
+  const myAll = all7.filter(r => r && r.driverId === currentUser.id);
+  // "mine" = pendientes de entrega (lo que importa para los totales)
+  const mine = myAll.filter(r => {
+    if (r.payment_status === 'pending') return false; // sin cobrar todavía
+    const pays = getTripPayments(r);
+    // Pendiente: tiene al menos un payment con status 'pending_handover' o 'pending_verification'
+    return pays.some(p => p && (p.status === 'pending_handover' || p.status === 'pending_verification'));
+  }).sort((a,b) => ((b.date||'') + ' ' + (b.time||'')).localeCompare((a.date||'') + ' ' + (a.time||'')));
 
   // Sumas: si la carrera tiene amount_usd (congelado), usar ese.
   // Si no (carreras viejas), convertir on-the-fly con la tasa actual.
@@ -2992,11 +3024,17 @@ async function loadDriverTrips() {
   if ($('drv-carr'))  $('drv-carr').textContent  = mine.length || '—';
   if ($('drv-tip'))   $('drv-tip').textContent   = tipToShow   ? fmtFn(tipToShow)   : '—';
 
-  // Footer
+  // Footer del chofer (visible siempre)
+  // Muestra el TOTAL pendiente de entrega (no el del día calendario),
+  // que es lo más útil para el chofer en su día a día.
+  const todayCalendarStr = ymdLocal(todayD);
+  const todayCount = myAll.filter(r => r.date === todayCalendarStr).length;
   if ($('drv-foot-txt')) {
     $('drv-foot-txt').textContent = mine.length
-      ? `HOY: ${mine.length} carrera${mine.length===1?'':'s'}`
-      : 'HOY: 0 carreras';
+      ? `Pendiente: ${mine.length} carrera${mine.length===1?'':'s'}`
+      : todayCount
+        ? `HOY: ${todayCount} carrera${todayCount===1?'':'s'}`
+        : 'Sin carreras pendientes';
   }
   if ($('drv-foot-net')) {
     $('drv-foot-net').textContent = netoToShow ? fmtFn(netoToShow) : '—';
@@ -3007,31 +3045,7 @@ async function loadDriverTrips() {
   // "editar" si todavía no fue entregada al admin.
   const el = $('drv-trips');
   if (el) {
-    let allMine = [];
-    const todayD = new Date(); todayD.setHours(0,0,0,0);
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(todayD); d.setDate(d.getDate() - i);
-      const ds = ymdLocal(d);
-      try { allMine = allMine.concat(await dbGetTripsByDate(ds)); } catch(e) {}
-    }
-    // Completar desde PB
-    if (fbRef && isOnline) {
-      const localIds = new Set(allMine.map(t => t.id));
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(todayD); d.setDate(d.getDate() - i);
-        const ds = ymdLocal(d);
-        try {
-          const snap = await fbRef.ref('trips/' + ds).once('value');
-          for (const ft of Object.values(snap.val() || {})) {
-            if (ft && typeof ft === 'object' && ft.driverId === currentUser.id && !localIds.has(ft.id)) {
-              allMine.push(ft);
-              localIds.add(ft.id);
-            }
-          }
-        } catch(e) {}
-      }
-    }
-    allMine = allMine.filter(r => r && r.driverId === currentUser.id);
+    const allMine = myAll;
 
     if (!allMine.length) {
       el.innerHTML = '<div style="font-size:13px;color:var(--txt3);padding:14px 0;text-align:center">Sin carreras registradas todavía.</div>';
@@ -3895,8 +3909,7 @@ function populateZoneDropdowns() {
 function openHoySheet() {
   loadDriverTrips(); // refrescar datos
   loadDriverPendingAcumulado(); // mostrar lo pendiente entregar/verificar
-  const today = new Date().toLocaleDateString('es', {day:'numeric', month:'long'});
-  if ($('sheet-date')) $('sheet-date').textContent = '· ' + today;
+  if ($('sheet-date')) $('sheet-date').textContent = '· totales de pendientes de entrega';
   $('sheet-hoy').classList.add('show');
 }
 
