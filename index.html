@@ -2157,6 +2157,10 @@ function showATab(name, el) {
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'gps') initGpsTab();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
+  // Refresh background de km del día actual (cool-down 1 min)
+  if (['resumen','detalle','historial','caja'].includes(name)) {
+    refreshTodayKmIfAdmin().catch(()=>{});
+  }
 }
 
 // ════════════════════════════════════════
@@ -3446,11 +3450,20 @@ async function loadResumen() {
     if (!drv.byCur[cur]) drv.byCur[cur] = 0;
     drv.byCur[cur] += (r.amount || 0);
   });
-  // GPS del rango: si es un solo día usar ese, si son varios, no mostrar km
-  const gDay = (dates.length === 1) ? (gpsCache[dates[0]] || {}) : {};
+  // GPS del rango: leemos de gps_daily (PocketBase). Para los choferes
+  // mappeados con un dispositivo Traccar, sumamos km del rango. Si hay
+  // huecos (días no calculados aún) se disparan refresh background.
+  const gpsKmByDriver = {};
+  const gpsMap_ = getGpsMapping();
+  for (const id of Object.keys(byD)) {
+    if (gpsMap_[id]) {
+      try { gpsKmByDriver[id] = await sumGpsKmRange(dates, id); }
+      catch(e) { gpsKmByDriver[id] = 0; }
+    }
+  }
   $('a-drivers').innerHTML = Object.entries(byD).map(([id,d]) => {
     const [bg,col] = COLS[d.idx % COLS.length];
-    const gps = Object.values(gDay).find(g => g.driverId === id) || null;
+    const km = gpsKmByDriver[id] || 0;
     const curBreakdown = Object.entries(d.byCur)
       .map(([c,a]) => `${Math.round(a).toLocaleString('es')} ${c}`)
       .join(' · ') || '—';
@@ -3464,8 +3477,8 @@ async function loadResumen() {
     </div><div class="drv-stats">
       <div class="ds"><div class="dsv" style="color:var(--g)">${d.netoUsd ? fmtUsd(d.netoUsd) : '—'}</div><div class="dsl">Neto USD</div></div>
       <div class="ds"><div class="dsv" style="color:var(--re)">${d.comUsd ? '-' + fmtUsd(d.comUsd) : '—'}</div><div class="dsl">Comis. USD</div></div>
-      <div class="ds"><div class="dsv">${gps ? fK(gps.km) : '—'}</div><div class="dsl">Km</div></div>
-      <div class="ds"><div class="dsv" style="font-size:11px;font-weight:500">${gps && gps.km > 0 && d.netoUsd ? '$' + (d.netoUsd / gps.km).toFixed(2) : '—'}</div><div class="dsl">USD/km</div></div>
+      <div class="ds"><div class="dsv">${km > 0 ? fK(km) : '—'}</div><div class="dsl">Km</div></div>
+      <div class="ds"><div class="dsv" style="font-size:11px;font-weight:500">${km > 0 && d.netoUsd ? '$' + (d.netoUsd / km).toFixed(2) : '—'}</div><div class="dsl">USD/km</div></div>
     </div>
     <div style="font-size:10px;color:var(--txt3);padding:4px 12px 8px">Cobrado: ${curBreakdown}${tipLine}</div>
     </div>`;
@@ -3846,6 +3859,139 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+// Calcular km totales desde array de posiciones Traccar.
+// Algoritmo geográfico: ignora velocidad reportada (poco confiable),
+// solo considera distancia + tiempo entre puntos consecutivos.
+function calcKmFromPositions(positions) {
+  let totalKm = 0;
+  if (!Array.isArray(positions)) return 0;
+  for (let i = 1; i < positions.length; i++) {
+    const p1 = positions[i-1], p2 = positions[i];
+    if (!p1 || !p2 || !p1.fixTime || !p2.fixTime) continue;
+    const t1 = new Date(p1.fixTime).getTime();
+    const t2 = new Date(p2.fixTime).getTime();
+    const dtSec = (t2 - t1) / 1000;
+    if (dtSec <= 0 || dtSec > 300) continue;
+    const distM = haversineKm(p1.latitude, p1.longitude, p2.latitude, p2.longitude) * 1000;
+    if (distM < 8) continue;
+    const implKmh = (distM / 1000) / (dtSec / 3600);
+    if (implKmh > 150) continue;
+    totalKm += distM / 1000;
+  }
+  return Math.round(totalKm * 10) / 10;
+}
+
+// ── Caché de km diarios consultando colección gps_daily de PocketBase ──
+// Persistimos los km por (date, driverId) para no recalcular siempre.
+let _gpsDailyCache = {}; // {`${date}-${driverId}`: { km, positions_count, is_final }}
+
+async function getGpsDailyKm(date, driverId) {
+  const key = `${date}-${driverId}`;
+  if (_gpsDailyCache[key]) return _gpsDailyCache[key];
+  if (!fbRef || !isOnline) return null;
+  try {
+    const snap = await fbRef.ref(`gps_daily/${date}__${driverId}`).once('value');
+    const v = snap.val();
+    if (v) { _gpsDailyCache[key] = v; return v; }
+  } catch(e) {}
+  return null;
+}
+
+// Recalcula y guarda km de un (date, driverId). Solo el admin puede ejecutarlo
+// (necesita credenciales Traccar). Si la fecha es de un día anterior y ya
+// hay un registro is_final=true, no recalcula.
+async function refreshGpsDailyKm(date, driverId, force = false) {
+  if (!currentUser || currentUser.role !== 'admin') return null;
+  if (!tcConn || !tcDevices.length) return null;
+  const traccarDevId = findTraccarDeviceId(driverId);
+  if (!traccarDevId) return null;
+
+  // Si el record existe y es is_final, no recalcular (es del pasado, ya cerrado)
+  const existing = await getGpsDailyKm(date, driverId);
+  const todayCal = todayStr();
+  if (existing && existing.is_final && !force && date < todayCal) return existing;
+
+  const cfg = getCfg();
+  const from = `${date}T00:00:00.000Z`;
+  const to   = `${date}T23:59:59.999Z`;
+  const url  = `${cfg.traccar.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const headers = {
+    'Authorization': 'Basic ' + btoa(cfg.traccar.email + ':' + cfg.traccar.pass),
+    'Accept': 'application/json'
+  };
+  let positions;
+  try {
+    const r = await fetch(url, { headers });
+    if (!r.ok) return null;
+    positions = await r.json();
+  } catch(e) { return null; }
+
+  const km = calcKmFromPositions(positions);
+  // El record ID usa el formato date__driverId para upsert determinístico
+  const map = getGpsMapping();
+  const rec = {
+    id: `${date}__${driverId}`,  // permitir upsert por path
+    date,
+    driverId,
+    traccar_unique_id: map[driverId] || '',
+    km,
+    positions_count: positions.length,
+    calculated_at: new Date().toISOString(),
+    is_final: date < todayCal  // si es de un día anterior, marcamos final
+  };
+  // Guardar en PB usando upsert
+  try {
+    await fbRef.ref(`gps_daily/${date}__${driverId}`).set({ ...rec });
+  } catch(e) { console.warn('save gps_daily err', e); }
+  _gpsDailyCache[`${date}-${driverId}`] = rec;
+  return rec;
+}
+
+// Auto-refresh del km del día actual para todos los choferes mappeados.
+// Se ejecuta cuando admin entra al panel o cambia de pestaña, con cool-down
+// de 1 minuto para no martillar Traccar. Refresca en background sin bloquear.
+let _lastGpsRefresh = 0;
+async function refreshTodayKmIfAdmin() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  if (Date.now() - _lastGpsRefresh < 60000) return; // cool-down 1 min
+  // Si Traccar no está conectado, intentar conectar primero
+  if (!tcConn) {
+    const cfg = getCfg();
+    if (cfg.traccar && cfg.traccar.email && cfg.traccar.pass) {
+      try { await connTraccar(); } catch(e) {}
+    }
+  }
+  if (!tcConn) return;
+  _lastGpsRefresh = Date.now();
+  const map = getGpsMapping();
+  const todayCal = todayStr();
+  // Refresh background el día actual para cada chofer mappeado
+  for (const driverId of Object.keys(map)) {
+    refreshGpsDailyKm(todayCal, driverId, true).catch(()=>{});
+  }
+}
+
+// Suma km del rango [dates] para un chofer. Solo lee de PB (no recalcula).
+// Si no hay registro para una fecha y el chofer está mappeado y hay
+// credenciales Traccar, dispara un refresh background (no bloquea).
+async function sumGpsKmRange(dates, driverId) {
+  let total = 0;
+  let pendingRefresh = [];
+  for (const d of dates) {
+    const rec = await getGpsDailyKm(d, driverId);
+    if (rec && typeof rec.km === 'number') {
+      total += rec.km;
+    } else {
+      pendingRefresh.push(d);
+    }
+  }
+  // Refresh background los que faltan (solo si admin con Traccar conectado)
+  if (pendingRefresh.length && currentUser && currentUser.role === 'admin' && tcConn) {
+    pendingRefresh.forEach(d => refreshGpsDailyKm(d, driverId).catch(()=>{}));
+  }
+  return Math.round(total * 10) / 10;
+}
+
 // Carga y dibuja el recorrido del chofer en el mapa
 async function loadGPSMap() {
   const driverId = $('gps-chofer')?.value;
@@ -3910,25 +4056,25 @@ async function loadGPSMap() {
     return;
   }
 
-  // Calcular km totales: usamos la geografía + tiempo, no la velocidad
-  // reportada (algunas apps Traccar Client mandan speed=0 o un valor fijo).
-  // Reglas de filtrado:
-  //   - Distancia entre puntos < 8 m → ruido GPS estacionario, ignorar
-  //   - Tiempo entre puntos > 5 min → hubo gap (app cerrada), no sumar
-  //   - Velocidad implícita (distancia/tiempo) > 150 km/h → salto absurdo
-  let totalKm = 0;
-  for (let i = 1; i < positions.length; i++) {
-    const p1 = positions[i-1], p2 = positions[i];
-    if (!p1 || !p2 || !p1.fixTime || !p2.fixTime) continue;
-    const t1 = new Date(p1.fixTime).getTime();
-    const t2 = new Date(p2.fixTime).getTime();
-    const dtSec = (t2 - t1) / 1000;
-    if (dtSec <= 0 || dtSec > 300) continue;     // gap > 5min: no sumar
-    const distM = haversineKm(p1.latitude, p1.longitude, p2.latitude, p2.longitude) * 1000;
-    if (distM < 8) continue;                      // < 8 m: ruido estacionario
-    const implKmh = (distM / 1000) / (dtSec / 3600);
-    if (implKmh > 150) continue;                  // > 150 km/h: salto GPS
-    totalKm += distM / 1000;
+  // Calcular km totales (algoritmo geográfico independiente de speed)
+  const totalKm = calcKmFromPositions(positions);
+
+  // Persistir el resultado en PocketBase para que aparezca en Resumen/Detalle
+  // sin necesidad de recargar Traccar cada vez. Solo si admin (puede grabar).
+  if (currentUser && currentUser.role === 'admin') {
+    const map = getGpsMapping();
+    const todayCal = todayStr();
+    const rec = {
+      date,
+      driverId,
+      traccar_unique_id: map[driverId] || '',
+      km: totalKm,
+      positions_count: positions.length,
+      calculated_at: new Date().toISOString(),
+      is_final: date < todayCal
+    };
+    try { await fbRef.ref(`gps_daily/${date}__${driverId}`).set(rec); } catch(e) {}
+    _gpsDailyCache[`${date}-${driverId}`] = rec;
   }
 
   // Línea del recorrido + puntitos
