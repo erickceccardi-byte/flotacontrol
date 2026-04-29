@@ -1579,12 +1579,16 @@ const PB_URL = 'https://ecocargo.app';
 
 // Mapa: top-level Firebase path → colección PocketBase + claves del path
 const PB_PATHS = {
-  trips:        { coll: 'trips',        keys: ['date',     'trip_id'] },
-  pagos:        { coll: 'pagos',        keys: ['driverId', 'pago_id'] },
-  pagos_canal:  { coll: 'pagos_canal',  keys: ['canal',    'pago_id'] },
-  movimientos:  { coll: 'movimientos',  keys: ['mov_id'] },
-  tipo_cambio:  { coll: 'tipo_cambio',  keys: ['fecha'] },
-  driver_state: { coll: 'driver_state', keys: ['driverId'] },
+  trips:             { coll: 'trips',             keys: ['date',     'trip_id'] },
+  pagos:             { coll: 'pagos',             keys: ['driverId', 'pago_id'] },
+  pagos_canal:       { coll: 'pagos_canal',       keys: ['canal',    'pago_id'] },
+  movimientos:       { coll: 'movimientos',       keys: ['mov_id'] },
+  tipo_cambio:       { coll: 'tipo_cambio',       keys: ['fecha'] },
+  driver_state:      { coll: 'driver_state',      keys: ['driverId'] },
+  entregas:          { coll: 'entregas',          keys: ['entrega_id'] },
+  gastos_chofer:     { coll: 'gastos_chofer',     keys: ['gasto_id'] },
+  gps_daily:         { coll: 'gps_daily',         keys: ['date',     'driverId'] },
+  anticipos_adriana: { coll: 'anticipos_adriana', keys: ['anticipo_id'] },
   // 'caja/saldo_inicial' es un singleton manejado aparte
 };
 
@@ -3970,7 +3974,7 @@ async function getGpsDailyKm(date, driverId) {
   if (_gpsDailyCache[key]) return _gpsDailyCache[key];
   if (!fbRef || !isOnline) return null;
   try {
-    const snap = await fbRef.ref(`gps_daily/${date}__${driverId}`).once('value');
+    const snap = await fbRef.ref(`gps_daily/${date}/${driverId}`).once('value');
     const v = snap.val();
     if (v) { _gpsDailyCache[key] = v; return v; }
   } catch(e) {}
@@ -4021,7 +4025,7 @@ async function refreshGpsDailyKm(date, driverId, force = false) {
   };
   // Guardar en PB usando upsert
   try {
-    await fbRef.ref(`gps_daily/${date}__${driverId}`).set({ ...rec });
+    await fbRef.ref(`gps_daily/${date}/${driverId}`).set({ ...rec });
   } catch(e) { console.warn('save gps_daily err', e); }
   _gpsDailyCache[`${date}-${driverId}`] = rec;
   return rec;
@@ -4153,7 +4157,7 @@ async function loadGPSMap() {
       calculated_at: new Date().toISOString(),
       is_final: date < todayCal
     };
-    try { await fbRef.ref(`gps_daily/${date}__${driverId}`).set(rec); } catch(e) {}
+    try { await fbRef.ref(`gps_daily/${date}/${driverId}`).set(rec); } catch(e) {}
     _gpsDailyCache[`${date}-${driverId}`] = rec;
   }
 
