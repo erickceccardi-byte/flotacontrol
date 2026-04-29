@@ -514,6 +514,13 @@ audio{width:100%;height:36px;margin-top:6px}
             <div class="dccom" id="lbl-nave-billetera">20%</div>
           </div>
         </div>
+        <div class="dcbtn" id="cb-adriana" onclick="selCanal('adriana')" style="grid-column:1/-1;background:#FDF2F8;border-color:#EC4899">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+            <div class="dcdot" style="background:#EC4899"></div>
+            <div class="dcname">Adriana</div>
+            <div class="dccom" style="color:#9d2562">CUP transferencia · 0%</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -949,6 +956,12 @@ audio{width:100%;height:36px;margin-top:6px}
       <div id="caja-saldo-total-usd" style="text-align:center;font-size:13px;color:var(--txt2);margin-top:10px;font-weight:500"></div>
       <div id="caja-fx-note" style="font-size:10px;color:var(--txt3);margin-top:-2px;margin-bottom:8px;text-align:center"></div>
 
+      <div class="sh">💰 Fondo de pago anticipado — Adriana</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Adriana paga por adelantado. Cada carrera marcada "Adriana" descuenta de este fondo. El monto de la carrera entra a caja como CUP transferencia normal.
+      </div>
+      <div id="caja-adriana"></div>
+
       <div class="sh">Pendiente de entrega de choferes</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
         Efectivo cobrado por choferes que aún no fue entregado. Cuando el chofer te traiga el dinero, marcá <strong>"Recibí entrega"</strong> y entrará a caja.
@@ -1272,6 +1285,29 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: ANTICIPO ADRIANA ═══════════ -->
+<div id="modal-anticipo-adr" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl" id="ant-adr-ttl">Nuevo anticipo de Adriana</div>
+    <input type="hidden" id="ant-adr-id">
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Pago anticipado en CUP transferencia que entra al fondo de Adriana.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input type="number" id="ant-adr-amount" placeholder="Monto" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <span style="display:flex;align-items:center;padding:0 12px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font-size:13px;color:var(--txt2);font-weight:600">CUP transfer</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="date" id="ant-adr-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+    </div>
+    <input type="text" id="ant-adr-desc" placeholder="Descripción / nota (opcional)" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeAnticipoAdrianaModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveAnticipoAdriana()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: GASTO DEL CHOFER ═══════════ -->
 <div id="modal-gasto" class="dmodal">
   <div class="dmodal-card">
@@ -1320,6 +1356,7 @@ audio{width:100%;height:36px;margin-top:6px}
         <option value="wapp">WhatsApp</option>
         <option value="nave">La Nave</option>
         <option value="nave_billetera">Nave Billetera</option>
+        <option value="adriana">Adriana</option>
       </select>
       <select id="et-driver" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none"></select>
     </div>
@@ -1410,8 +1447,8 @@ const VEHICULOS = [
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
-const SRC = { nave:'La Nave', cinco:'Marco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera' };
-const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave' };
+const SRC = { nave:'La Nave', cinco:'Marco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera', adriana:'Adriana' };
+const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave', adriana:'b-cinco' };
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
 let currentUser = null;
@@ -2570,7 +2607,11 @@ async function loadDetalle() {
       results.forEach(day => Object.values(day).forEach(t => { if (t && typeof t === 'object' && t.driverId === driverId) trips90.push(t); }));
     } catch(e) {}
   }
-  const netoBase90 = trips90.reduce((s, t) => s + getTripUsd(t, 'netAmount'), 0);
+  // Bono trimestral: NO se calcula sobre carreras del canal Adriana
+  // (esas son pagos anticipados, ya pagadas a la empresa, no generan bono).
+  const netoBase90 = trips90
+    .filter(t => t && t.source !== 'adriana')
+    .reduce((s, t) => s + getTripUsd(t, 'netAmount'), 0);
   const bonoCalcUsd = netoBase90 * (bonusPct / 100);
   const bonoCalcCup = (cupRate && bonoCalcUsd) ? Math.round(bonoCalcUsd * cupRate) : null;
   const baseCup = (cupRate && netoBase90) ? Math.round(netoBase90 * cupRate) : null;
@@ -2701,24 +2742,62 @@ function selCanal(src) {
   selCan = src;
   document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
   // 'nave_billetera' usa el estilo visual de 'nave' (mismo color rojo)
-  const styleClass = (src === 'nave_billetera') ? 'sel-nave' : 'sel-' + src;
-  $('cb-' + src).className = 'dcbtn ' + styleClass;
-  // Mantener el span ancho-completo del botón Nave Billetera
-  if (src === 'nave_billetera') $('cb-' + src).style.gridColumn = '1/-1';
+  // 'adriana' tiene su propio estilo rosa definido inline
+  let styleClass;
+  if (src === 'nave_billetera') styleClass = 'sel-nave';
+  else if (src === 'adriana') styleClass = '';
+  else styleClass = 'sel-' + src;
+  const btn = $('cb-' + src);
+  btn.className = 'dcbtn ' + styleClass;
+  // Mantener span ancho completo + estilo Adriana
+  if (src === 'nave_billetera') btn.style.gridColumn = '1/-1';
+  if (src === 'adriana') {
+    btn.style.gridColumn = '1/-1';
+    btn.style.background = '#FCE7F3';
+    btn.style.borderColor = '#DB2777';
+    btn.style.borderWidth = '2px';
+  } else {
+    // Reset estilo Adriana si otro canal seleccionado
+    const adrBtn = $('cb-adriana');
+    if (adrBtn) {
+      adrBtn.style.background = '#FDF2F8';
+      adrBtn.style.borderColor = '#EC4899';
+      adrBtn.style.borderWidth = '';
+    }
+  }
 
-  // Si es Nave Billetera: el dinero NO entra a caja, así que la forma
-  // (efectivo/transferencia) no aplica. Ocultamos los botones de cobro.
   const pagoSection = document.querySelector('.d-pago');
-  if (pagoSection) {
-    if (src === 'nave_billetera') {
-      pagoSection.style.display = 'none';
-      // También limpiamos selCobroType para que la validación lo permita
-      selCobroType = 'billetera';
-      document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
-    } else {
+  // Adriana: SOLO CUP transferencia. Forzamos los selectores y los
+  // bloqueamos para que el chofer no pueda cambiar.
+  if (src === 'adriana') {
+    selCobroType = 'transferencia';
+    if ($('f-currency')) { $('f-currency').value = 'CUP'; $('f-currency').disabled = true; }
+    if (pagoSection) {
       pagoSection.style.display = '';
-      // Si veníamos de billetera, resetear el cobro
-      if (selCobroType === 'billetera') selCobroType = null;
+      $('co-efec').className = 'dpbtn';
+      $('co-trans').className = 'dpbtn sel-trans';
+      $('co-efec').style.opacity = '0.4'; $('co-efec').style.pointerEvents = 'none';
+      $('co-trans').style.opacity = '1';   $('co-trans').style.pointerEvents = 'none';
+    }
+  } else {
+    // Restaurar selectores libres si veníamos de Adriana
+    if ($('f-currency')) $('f-currency').disabled = false;
+    if ($('co-efec')) { $('co-efec').style.opacity = ''; $('co-efec').style.pointerEvents = ''; }
+    if ($('co-trans')) { $('co-trans').style.opacity = ''; $('co-trans').style.pointerEvents = ''; }
+    // Si es Nave Billetera: el dinero NO entra a caja, así que la forma
+    // (efectivo/transferencia) no aplica. Ocultamos los botones de cobro.
+    if (pagoSection) {
+      if (src === 'nave_billetera') {
+        pagoSection.style.display = 'none';
+        selCobroType = 'billetera';
+        document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
+      } else {
+        pagoSection.style.display = '';
+        if (selCobroType === 'billetera' || selCobroType === 'transferencia' && selCan !== src) {
+          // No reseteamos si ya tenía algo elegido válido
+        }
+        if (selCobroType === 'billetera') selCobroType = null;
+      }
     }
   }
   updNet();
@@ -2738,7 +2817,8 @@ function getCom(s) {
     cinco: c.cinco||10,
     wapp: c.wapp||10,
     directo: 0,
-    nave_billetera: c.nave||20  // misma comisión que La Nave
+    nave_billetera: c.nave||20,  // misma comisión que La Nave
+    adriana: 0                    // Adriana ya pagó adelantado, sin comisión
   }[s] ?? 0;
 }
 
@@ -4439,6 +4519,142 @@ function saveDescModal() {
 }
 
 // ════════════════════════════════════════
+// ADRIANA — fondo de pago anticipado
+// ════════════════════════════════════════
+async function fetchAnticiposAdriana() {
+  if (!fbRef || !isOnline) return [];
+  try {
+    const snap = await fbRef.ref('anticipos_adriana').once('value');
+    return Object.values(snap.val() || {});
+  } catch(e) { return []; }
+}
+
+function openAnticipoAdrianaModal(editingId) {
+  if (!currentUser || currentUser.role !== 'admin') { toast('Solo admin'); return; }
+  $('ant-adr-id').value = editingId || '';
+  $('ant-adr-ttl').textContent = editingId ? 'Editar anticipo de Adriana' : 'Nuevo anticipo de Adriana';
+  if (!editingId) {
+    $('ant-adr-amount').value = '';
+    $('ant-adr-date').value = todayStr();
+    $('ant-adr-desc').value = '';
+  } else {
+    fetchAnticiposAdriana().then(list => {
+      const a = list.find(x => x.anticipo_id === editingId);
+      if (a) {
+        $('ant-adr-amount').value = a.amount || '';
+        $('ant-adr-date').value = a.date || todayStr();
+        $('ant-adr-desc').value = a.descripcion || '';
+      }
+    });
+  }
+  $('modal-anticipo-adr').classList.add('show');
+  setTimeout(() => $('ant-adr-amount')?.focus(), 100);
+}
+function closeAnticipoAdrianaModal() { $('modal-anticipo-adr').classList.remove('show'); }
+
+async function saveAnticipoAdriana() {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const amt = parseFloat($('ant-adr-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const editingId = $('ant-adr-id').value;
+  const id = editingId || (Date.now() + '_' + Math.random().toString(36).slice(2,7));
+  const updates = {
+    anticipo_id: id,
+    amount: amt,
+    currency: 'CUP',
+    cobro: 'transferencia',
+    date: $('ant-adr-date').value || todayStr(),
+    descripcion: $('ant-adr-desc').value.trim()
+  };
+  try {
+    if (editingId) {
+      // Solo actualizar campos editables (preserva created_at, created_by)
+      await fbRef.ref(`anticipos_adriana/${id}`).update(updates);
+    } else {
+      updates.created_at = new Date().toISOString();
+      updates.created_by = currentUser ? currentUser.id : 'admin';
+      await fbRef.ref(`anticipos_adriana/${id}`).set(updates);
+    }
+    toast(editingId ? 'Anticipo actualizado ✓' : 'Anticipo registrado ✓');
+    closeAnticipoAdrianaModal();
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function deleteAnticipoAdriana(id) {
+  if (!confirm('¿Eliminar este anticipo de Adriana?')) return;
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`anticipos_adriana/${id}`).remove();
+    toast('Anticipo eliminado');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+// Renderiza la sección "Fondo Adriana" en la pestaña Caja
+async function renderCajaAdriana(allTrips) {
+  const el = $('caja-adriana');
+  if (!el) return;
+  const anticipos = await fetchAnticiposAdriana();
+  // Carreras de Adriana cobradas (no pendientes) — restan del fondo
+  const carrerasAdriana = (allTrips || []).filter(t =>
+    t && t.source === 'adriana' && t.payment_status !== 'pending'
+  );
+  const totalAnticipos = anticipos.reduce((s,a) => s + (a.amount || 0), 0);
+  const totalConsumido = carrerasAdriana.reduce((s,t) => s + (t.amount || 0), 0);
+  const saldo = totalAnticipos - totalConsumido;
+  const fmt = n => Math.round(n).toLocaleString('es');
+  const colorSaldo = saldo < 0 ? 'var(--re)' : saldo === 0 ? 'var(--txt2)' : 'var(--g)';
+
+  let anticipoLines = '';
+  if (anticipos.length) {
+    const sorted = [...anticipos].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    anticipoLines = sorted.map(a => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--brd);font-size:12px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500">+ ${fmt(a.amount)} CUP</div>
+          <div style="font-size:10px;color:var(--txt3)">${a.date}${a.descripcion ? ' · ' + a.descripcion : ''}</div>
+        </div>
+        <button onclick="openAnticipoAdrianaModal('${a.anticipo_id}')" style="background:none;border:none;color:var(--txt2);cursor:pointer;font-size:13px;padding:0 4px">✎</button>
+        <button onclick="deleteAnticipoAdriana('${a.anticipo_id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:0 4px">✕</button>
+      </div>
+    `).join('');
+  }
+
+  let consumosLines = '';
+  if (carrerasAdriana.length) {
+    const sorted = [...carrerasAdriana].sort((a,b) => ((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')));
+    consumosLines = sorted.slice(0, 10).map(t => `
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
+        <span style="color:var(--txt2)">${t.date} · ${t.time||''} · ${t.driverName || '?'}</span>
+        <span style="color:var(--re);font-weight:500">− ${fmt(t.amount)} CUP</span>
+      </div>
+    `).join('');
+    if (carrerasAdriana.length > 10) {
+      consumosLines += `<div style="font-size:11px;color:var(--txt3);text-align:center;padding:5px 0">… ${carrerasAdriana.length - 10} más</div>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="card" style="padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;color:var(--txt3)">Saldo disponible del fondo</div>
+          <div style="font-size:24px;font-weight:700;color:${colorSaldo}">${saldo<0?'-':''}${fmt(Math.abs(saldo))} CUP</div>
+        </div>
+        <button class="btn btnacc" onclick="openAnticipoAdrianaModal()" style="white-space:nowrap;padding:8px 12px;font-size:12px">+ Anticipo</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);padding-top:6px;border-top:1px dashed var(--brd)">
+        <span>Anticipos recibidos: <strong>+${fmt(totalAnticipos)} CUP</strong></span>
+        <span>Carreras consumidas: <strong style="color:var(--re)">−${fmt(totalConsumido)} CUP</strong></span>
+      </div>
+      ${anticipoLines ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase">Anticipos</div>${anticipoLines}</div>` : ''}
+      ${consumosLines ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase">Últimas carreras consumidas</div>${consumosLines}</div>` : ''}
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════
 // GASTOS DEL CHOFER
 // ════════════════════════════════════════
 const GASTO_CATS = {
@@ -5269,6 +5485,10 @@ async function loadCaja() {
   // ─── Pendiente entrega de choferes + Transferencias por verificar ───
   renderCajaPendingHandover(driverPending);
   renderCajaPendingVerify(pendingTransfers);
+
+  // ─── Fondo Adriana (anticipos − consumos) ───
+  // Pasamos TODAS las trips (no filtradas por rango) para mostrar el saldo total
+  renderCajaAdriana(allTrips);
 
   // ─── Libro de operaciones (todas las entradas y salidas) ───
   // Junta trips + pagos + pagosCanal + movs en una sola lista cronológica.
