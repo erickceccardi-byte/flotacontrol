@@ -524,6 +524,22 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
     </div>
 
+    <!-- Selector Cobrada/Crédito (solo aparece para canal Marco) -->
+    <div class="d-section" id="d-marco-tipo" style="display:none">
+      <div class="d-lbl">Tipo de carrera Marco</div>
+      <div style="display:flex;gap:6px">
+        <div class="dpbtn" id="mt-cobrada" onclick="selMarcoTipo('cobrada')" style="flex:1;min-height:44px">
+          <span class="dpicon">✓</span><span class="dptxt">Cobrada</span>
+        </div>
+        <div class="dpbtn" id="mt-credito" onclick="selMarcoTipo('credito')" style="flex:1;min-height:44px">
+          <span class="dpicon">📒</span><span class="dptxt">Crédito</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.3">
+        <strong>Cobrada</strong>: cobraste al cliente normal · <strong>Crédito</strong>: Marco cubre la carrera, no cobrás nada
+      </div>
+    </div>
+
     <!-- MONTO DE LA CARRERA + MONEDA (sobre este se calcula la comisión) -->
     <div class="d-section">
       <div class="d-lbl">Monto de la carrera</div>
@@ -1285,6 +1301,34 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: COBRAR A CANAL (Marco) ═══════════ -->
+<div id="modal-cobro-canal" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl" id="cob-canal-ttl">Cobrar a Marco</div>
+    <input type="hidden" id="cob-canal-name">
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Registra un pago que el canal te hizo. El monto entra a caja y se descuenta de su deuda.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input type="number" id="cob-canal-amount" placeholder="Monto" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="cob-canal-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="USD">USD</option>
+        <option value="CUP">CUP</option>
+      </select>
+      <select id="cob-canal-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transfer</option>
+      </select>
+    </div>
+    <input type="date" id="cob-canal-date" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <input type="text" id="cob-canal-note" placeholder="Nota (opcional)" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeCobroCanalModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveCobroCanal()">Registrar cobro</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: ANTICIPO ADRIANA ═══════════ -->
 <div id="modal-anticipo-adr" class="dmodal">
   <div class="dmodal-card">
@@ -1453,6 +1497,7 @@ const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],
 
 let currentUser = null;
 let selCan = null, selCobroType = null;
+let marcoTipo = 'cobrada'; // 'cobrada' | 'credito' — solo aplica si selCan==='cinco'
 let idbDB = null;
 let isOnline = navigator.onLine;
 let fbRef = null; // PocketBase polyfill (mantiene API tipo Firebase)
@@ -1582,6 +1627,7 @@ const PB_PATHS = {
   trips:             { coll: 'trips',             keys: ['date',     'trip_id'] },
   pagos:             { coll: 'pagos',             keys: ['driverId', 'pago_id'] },
   pagos_canal:       { coll: 'pagos_canal',       keys: ['canal',    'pago_id'] },
+  cobros_canal:      { coll: 'cobros_canal',      keys: ['canal',    'cobro_id'] },
   movimientos:       { coll: 'movimientos',       keys: ['mov_id'] },
   tipo_cambio:       { coll: 'tipo_cambio',       keys: ['fecha'] },
   driver_state:      { coll: 'driver_state',      keys: ['driverId'] },
@@ -2771,6 +2817,19 @@ function selCanal(src) {
   }
 
   const pagoSection = document.querySelector('.d-pago');
+  // Marco: mostrar selector "Cobrada/Crédito" debajo del canal
+  const marcoTipoSection = $('d-marco-tipo');
+  if (marcoTipoSection) {
+    if (src === 'cinco') {
+      marcoTipoSection.style.display = '';
+      // Default: Cobrada
+      selMarcoTipo('cobrada');
+    } else {
+      marcoTipoSection.style.display = 'none';
+      marcoTipo = 'cobrada';
+    }
+  }
+
   // Adriana: SOLO CUP transferencia. Forzamos los selectores y los
   // bloqueamos para que el chofer no pueda cambiar.
   if (src === 'adriana') {
@@ -2811,6 +2870,25 @@ function selCobro(type) {
   selCobroType = type;
   $('co-efec').className = 'dpbtn' + (type === 'efectivo' ? ' sel-efec' : '');
   $('co-trans').className = 'dpbtn' + (type === 'transferencia' ? ' sel-trans' : '');
+}
+
+// Selector Cobrada/Crédito para canal Marco
+function selMarcoTipo(t) {
+  marcoTipo = t;
+  if ($('mt-cobrada')) $('mt-cobrada').className = 'dpbtn' + (t === 'cobrada' ? ' sel-efec' : '');
+  if ($('mt-credito')) $('mt-credito').className = 'dpbtn' + (t === 'credito' ? ' sel-trans' : '');
+  // Si crédito: el dinero NO entra a caja (Marco cubre), así que ocultamos
+  // los botones de cobro y la moneda queda forzada al monto que el chofer
+  // cobraría normalmente (para calcular la comisión y el salario).
+  const pagoSection = document.querySelector('.d-pago');
+  if (t === 'credito') {
+    if (pagoSection) pagoSection.style.display = 'none';
+    selCobroType = 'credito_marco'; // marker interno
+  } else {
+    if (pagoSection) pagoSection.style.display = '';
+    if (selCobroType === 'credito_marco') selCobroType = null;
+  }
+  updNet();
 }
 
 function getCom(s) {
@@ -2887,8 +2965,12 @@ async function regTrip() {
   // recibidos. Se cobrará después y el admin (o el chofer) la marca cobrada.
   const pendingCollection = !!$('f-pending')?.checked;
   // Para Nave Billetera no se pide forma de cobro (el dinero no entra a caja).
+  // Lo mismo para Marco crédito (Marco cubre el costo, no hay cobro al cliente).
+  const isMarcoCredito = (selCan === 'cinco' && marcoTipo === 'credito');
   if (selCan === 'nave_billetera') {
     selCobroType = 'billetera';
+  } else if (isMarcoCredito) {
+    selCobroType = 'credito_marco';
   } else if (!selCobroType && !pendingCollection) {
     toast('Selecciona la forma de cobro'); return;
   }
@@ -2957,6 +3039,11 @@ async function regTrip() {
   if (pendingCollection) {
     paymentStatus = 'pending';
     payments = [];
+  } else if (isMarcoCredito) {
+    // Marco crédito: la carrera no se cobra al cliente, no hay payment.
+    // El monto entra a la "deuda Marco" (admin lo ve en Caja).
+    paymentStatus = 'paid';
+    payments = [];
   } else {
     payments.push({
       amount: amt,
@@ -3016,6 +3103,8 @@ async function regTrip() {
     // Pagos multi-denominación + estado de cobro de la carrera
     payments,
     payment_status: paymentStatus,
+    // Crédito Marco: la carrera no genera cobro, suma a la deuda Marco
+    is_credito: !!isMarcoCredito,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value || '',
     destination: $('f-dst').value || '',
@@ -5114,6 +5203,58 @@ async function delPagoCanal(canal, pagoId) {
   } catch(e) { toast('Error: ' + e.message); }
 }
 
+// ── Cobros DESDE canal (canal nos paga lo que nos debe) ──
+function openCobroCanalModal(canal) {
+  $('cob-canal-name').value = canal;
+  $('cob-canal-ttl').textContent = `Cobrar a ${CANAL_NAMES[canal] || canal}`;
+  if ($('cob-canal-amount')) $('cob-canal-amount').value = '';
+  if ($('cob-canal-currency')) $('cob-canal-currency').value = 'USD';
+  if ($('cob-canal-cobro')) $('cob-canal-cobro').value = 'efectivo';
+  if ($('cob-canal-date')) $('cob-canal-date').value = todayStr();
+  if ($('cob-canal-note')) $('cob-canal-note').value = '';
+  $('modal-cobro-canal').classList.add('show');
+  setTimeout(() => $('cob-canal-amount')?.focus(), 100);
+}
+function closeCobroCanalModal() { $('modal-cobro-canal').classList.remove('show'); }
+
+async function saveCobroCanal() {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const canal = $('cob-canal-name').value;
+  const amt = parseFloat($('cob-canal-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('cob-canal-currency').value;
+  const cobro = $('cob-canal-cobro').value;
+  const date = $('cob-canal-date').value || todayStr();
+  const note = $('cob-canal-note').value.trim();
+  const usd = convertToUsd(amt, currency);
+  const id = Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  const cob = {
+    cobro_id: id, canal,
+    amount: amt, currency, cobro,
+    amount_usd: usd ? usd.usd : (currency === 'USD' ? amt : null),
+    fx_rate_used: usd ? usd.rate_used : null,
+    date,
+    received_at: new Date().toISOString(),
+    received_by: currentUser ? currentUser.id : 'admin',
+    note
+  };
+  try {
+    await fbRef.ref(`cobros_canal/${canal}/${id}`).set(cob);
+    toast(`Cobro registrado: ${Math.round(amt).toLocaleString('es')} ${currency} ✓`);
+    closeCobroCanalModal();
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function delCobroCanal(canal, cobroId) {
+  if (!confirm('¿Eliminar este cobro? El monto se sacará de caja.')) return;
+  try {
+    await fbRef.ref(`cobros_canal/${canal}/${cobroId}`).remove();
+    toast('Cobro eliminado');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
 // ── Mantenimiento: recalcular USD congelado de carreras viejas ──
 async function recalcularUsdFaltantes() {
   if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
@@ -5274,6 +5415,7 @@ async function loadCaja() {
   const pendingTransfers = []; // [{trip_id, driverId, driverName, amount, currency, date, time, payment_index}]
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
+    if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
     if (t.payment_status === 'pending') return; // carrera todavía no cobrada → no afecta caja
     const pays = getTripPayments(t);
     pays.forEach((p, idx) => {
@@ -5336,81 +5478,130 @@ async function loadCaja() {
   });
 
   // ─── Comisiones acumuladas por canal (USD canónico) ───
-  // Acumulado: suma de commAmount_usd de carreras del periodo, agrupadas por source.
-  // Carreras 'nave_billetera' suman a la deuda 'nave' (es la misma La Nave).
-  // Pagado: suma de pagos manuales a canal + total cobrado de carreras
-  // billetera (porque ese dinero ya lo cobró La Nave directamente).
+  // Para cada canal mantenemos 4 buckets:
+  //   comisionAcum: comisiones que la empresa le debe al canal (todas sus carreras)
+  //   creditoCons: solo Marco — neto de carreras crédito (Marco le debe a la empresa)
+  //   pagado:      lo que la empresa ya le pagó al canal (egreso de caja)
+  //   cobrado:     lo que el canal nos pagó (ingreso a caja, solo Marco aplica)
   const comisionAcum = { nave: 0, cinco: 0, wapp: 0 };
-  let billeteraAutoPagado = 0; // total cobrado por carreras billetera, va a "pagado a Nave"
+  const creditoCons  = { nave: 0, cinco: 0, wapp: 0 };
+  let billeteraAutoPagado = 0;
   trips.forEach(t => {
     const canal = t.source;
     if (canal !== 'nave' && canal !== 'cinco' && canal !== 'wapp' && canal !== 'nave_billetera') return;
-    // getTripUsd respeta el USD congelado si es válido (>0) y si no, convierte
-    // on-the-fly con fxCache. Esto cubre el caso de trips viejos guardados
-    // con commAmount_usd=0 cuando faltaba la tasa.
     const commUsd = getTripUsd(t, 'commAmount');
-    // Comisión acumulada — para nave_billetera va al bucket 'nave'
     const bucket = (canal === 'nave_billetera') ? 'nave' : canal;
     comisionAcum[bucket] += commUsd;
-    // Si es billetera, el total cobrado entero (amount + propina si la hubo)
-    // se cuenta como "pago anticipado" a La Nave (porque cobró directo).
     if (canal === 'nave_billetera') {
       billeteraAutoPagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
+    }
+    // Marco crédito: el NETO de la carrera suma a "Marco nos debe" (creditoCons)
+    if (canal === 'cinco' && t.is_credito) {
+      creditoCons.cinco += getTripUsd(t, 'netAmount');
     }
   });
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
   pagosCanal.forEach(pc => {
     if (CANAL_NAMES[pc.canal]) pagadoCanal[pc.canal] += (pc.amount_usd || pc.amount || 0);
   });
-  // Sumar el auto-pago de billetera a La Nave (NO se descuenta de caja porque
-  // las carreras billetera ya no entraron a caja en el paso 2).
   pagadoCanal.nave += billeteraAutoPagado;
+
+  // Cobros desde canal (Marco nos paga) — fetcheamos cobros_canal
+  const cobradoCanal = { nave: 0, cinco: 0, wapp: 0 };
+  let cobrosCanalAll = [];
+  if (fbRef && isOnline) {
+    try {
+      const snap = await fbRef.ref('cobros_canal').once('value');
+      const v = snap.val() || {};
+      Object.values(v).forEach(byCanal => {
+        Object.values(byCanal || {}).forEach(p => { if (p && typeof p === 'object') cobrosCanalAll.push(p); });
+      });
+    } catch(e) {}
+  }
+  const cobrosCanalDelRange = cobrosCanalAll.filter(range.filter);
+  cobrosCanalDelRange.forEach(cc => {
+    if (CANAL_NAMES[cc.canal]) {
+      cobradoCanal[cc.canal] += (cc.amount_usd || (cc.currency === 'USD' ? cc.amount : 0));
+    }
+    // Los cobros entran a caja en su moneda y forma original
+    aplicarATraza(matriz, cc.currency, cc.cobro, +(cc.amount || 0));
+  });
 
   // ─── Render comisiones por canal ───
   const canalesEl = $('caja-canales-list');
   if (canalesEl) {
     const fmtU = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
     canalesEl.innerHTML = ['nave','cinco','wapp'].map(canal => {
-      const acum = comisionAcum[canal];
-      const pag  = pagadoCanal[canal];
-      const pend = acum - pag;
-      const pendCol = pend > 0 ? 'var(--re)' : (pend < 0 ? 'var(--am)' : 'var(--txt2)');
+      const acum = comisionAcum[canal];     // empresa debe al canal (comisiones)
+      const pag  = pagadoCanal[canal];      // ya pagado al canal
+      const cred = creditoCons[canal];      // canal debe a empresa (carreras crédito, solo Marco)
+      const cob  = cobradoCanal[canal];     // canal ya nos pagó
+      // Saldo desde la perspectiva "qué nos debe el canal":
+      //   positivo (verde) → canal nos debe
+      //   negativo (rojo)  → empresa le debe al canal
+      // saldo = (carreras crédito + cobros recibidos) - (comisiones acum + pagos a canal)
+      const saldo = (cred + cob) - (acum + pag);
       const cName = CANAL_NAMES[canal];
       const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal).sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
+      const cobrosDeEsteCanal = cobrosCanalDelRange.filter(p => p.canal === canal).sort((a,b) => (b.received_at||'').localeCompare(a.received_at||''));
+
       const pagosHTML = pagosDeEsteCanal.length
         ? pagosDeEsteCanal.map(p => {
             const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
             const hora  = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
             return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
-              <span style="color:var(--txt2)">${fecha} ${hora ? '· ' + hora : ''}</span>
-              <span style="font-weight:500">$${Math.round(p.amount).toLocaleString('es')} USD</span>
+              <span style="color:var(--txt2)">↗ Pagamos ${fecha} ${hora ? '· ' + hora : ''}</span>
+              <span style="font-weight:500;color:var(--re)">−$${Math.round(p.amount).toLocaleString('es')} USD</span>
               <button onclick="delPagoCanal('${canal}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:1px 5px">✕</button>
             </div>`;
           }).join('')
-        : '<div style="color:var(--txt3);padding:5px 0;font-size:11px">Sin pagos en este período.</div>';
+        : '';
+      const cobrosHTML = cobrosDeEsteCanal.length
+        ? cobrosDeEsteCanal.map(p => {
+            const fecha = (p.received_at ? new Date(p.received_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
+            const hora  = p.received_at ? new Date(p.received_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
+              <span style="color:var(--txt2)">↙ Cobramos ${fecha} ${hora ? '· ' + hora : ''}</span>
+              <span style="font-weight:500;color:var(--g)">+${Math.round(p.amount).toLocaleString('es')} ${p.currency}</span>
+              <button onclick="delCobroCanal('${canal}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:1px 5px">✕</button>
+            </div>`;
+          }).join('')
+        : '';
+
+      // Color del saldo: verde si Marco nos debe, rojo si empresa le debe
+      const saldoCol = saldo > 0 ? 'var(--g)' : (saldo < 0 ? 'var(--re)' : 'var(--txt2)');
+      const saldoLbl = saldo > 0 ? `${cName} nos debe` : (saldo < 0 ? `Le debemos a ${cName}` : 'En cero');
+      // Solo Marco tiene botón "Cobrar" (es el único canal con carreras crédito)
+      const showCobrarBtn = (canal === 'cinco');
+
       return `
         <div class="card" style="margin-bottom:8px;padding:10px 12px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <strong style="color:var(--txt)">${cName}</strong>
-            <span style="font-size:11px;color:var(--txt3)">${acum > 0 || pag > 0 ? `${pagosDeEsteCanal.length} pago${pagosDeEsteCanal.length===1?'':'s'}` : ''}</span>
+            <span style="font-size:11px;color:${saldoCol};font-weight:600">${saldoLbl}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-            <span>Acumulado:</span><span style="font-weight:500">${fmtU(acum)}</span>
+          <div style="text-align:center;padding:8px 0;border-top:1px solid var(--brd);border-bottom:1px solid var(--brd)">
+            <div style="font-size:22px;font-weight:700;color:${saldoCol}">${saldo >= 0 ? '' : '-'}${fmtU(Math.abs(saldo))}</div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-            <span>Pagado:</span><span style="color:var(--re);font-weight:500">${pag ? '-' + fmtU(pag) : '—'}</span>
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
+            <span>Comisiones acum:</span><span>+${fmtU(acum)}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-top:1px solid var(--brd);font-weight:600">
-            <span>Pendiente:</span><span style="color:${pendCol}">${pend >= 0 ? fmtU(pend) : '-' + fmtU(Math.abs(pend))}</span>
+          ${cred > 0 ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
+            <span>Carreras crédito:</span><span style="color:var(--g)">+${fmtU(cred)}</span>
+          </div>` : ''}
+          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
+            <span>Pagado al canal:</span><span style="color:var(--re)">${pag ? '-' + fmtU(pag) : '—'}</span>
           </div>
+          ${cob > 0 ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
+            <span>Cobrado del canal:</span><span style="color:var(--g)">+${fmtU(cob)}</span>
+          </div>` : ''}
           <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
             <input type="number" id="pcan-${canal}-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:7px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
-            <span style="font-size:11px;color:var(--txt3)">USD efectivo</span>
-            <button class="btn btnacc" onclick="registrarPagoCanal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">Pagar</button>
+            <span style="font-size:11px;color:var(--txt3)">USD ef.</span>
+            <button class="btn" onclick="registrarPagoCanal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↗ Pagar</button>
+            ${showCobrarBtn ? `<button class="btn btnacc" onclick="openCobroCanalModal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↙ Cobrar</button>` : ''}
           </div>
-          <div style="margin-top:8px">
-            ${pagosHTML}
-          </div>
+          ${(pagosHTML || cobrosHTML) ? `<div style="margin-top:8px">${pagosHTML}${cobrosHTML}</div>` : ''}
         </div>`;
     }).join('');
   }
@@ -5514,6 +5705,7 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
   // Ingresos por carreras (excepto nave_billetera que no toca caja)
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
+    if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
     const monto = (t.amount || 0) + (t.tipAmount || 0);
     if (!monto) return;
     ops.push({
@@ -5653,6 +5845,7 @@ async function markDriverHandover(driverId) {
         if (t.payment_status === 'pending') continue;
         // Excluir nave_billetera (no afecta caja)
         if (t.source === 'nave_billetera' || t.cobro === 'billetera') continue;
+        if (t.source === 'cinco' && t.is_credito) continue; // Marco crédito
 
         let newPays;
         let changed = false;
