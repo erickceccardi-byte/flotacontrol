@@ -1421,7 +1421,19 @@ audio{width:100%;height:36px;margin-top:6px}
       <input type="time" id="et-time" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
     </div>
     <input type="text" id="et-desc" placeholder="Descripción / nota" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
-    <label style="display:flex;align-items:center;gap:6px;margin:6px 0;font-size:12px;color:var(--txt2);cursor:pointer">
+
+    <!-- Pagos adicionales (multi-denominación) -->
+    <div style="font-size:11px;color:var(--txt2);margin-top:6px;font-weight:500">Pagos adicionales (otras monedas)</div>
+    <div id="et-extra-list" style="display:flex;flex-direction:column;gap:4px;margin-top:4px"></div>
+    <button type="button" onclick="openExtraPayModalEdit()" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:4px">+ Otra moneda en este cobro</button>
+
+    <!-- Marco crédito (solo si canal=cinco) -->
+    <label id="et-marco-credito-row" style="display:none;align-items:center;gap:6px;margin:8px 0 0;font-size:12px;color:var(--txt2);cursor:pointer">
+      <input type="checkbox" id="et-marco-credito" style="margin:0;flex-shrink:0">
+      <span>Carrera <strong>Marco crédito</strong> (Marco cubre, no entra a caja)</span>
+    </label>
+
+    <label style="display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:12px;color:var(--txt2);cursor:pointer">
       <input type="checkbox" id="et-pending" style="margin:0;flex-shrink:0">
       <span>Marcar como <strong>pendiente de cobro</strong> (cliente paga después)</span>
     </label>
@@ -4835,6 +4847,35 @@ async function openEditTrip(tripId, date) {
     $('et-time').value = t.time || '';
     $('et-desc').value = t.desc || '';
     if ($('et-pending')) $('et-pending').checked = (t.payment_status === 'pending');
+    if ($('et-marco-credito')) $('et-marco-credito').checked = !!t.is_credito;
+    // El row de Marco crédito solo se muestra si canal=cinco
+    const showMarcoCredito = (t.source === 'cinco');
+    if ($('et-marco-credito-row')) $('et-marco-credito-row').style.display = showMarcoCredito ? 'flex' : 'none';
+
+    // Cargar pagos extras del trip a editar (todos los payments excepto el principal y la propina)
+    // Para identificar el "principal" usamos: el primer payment que matchee amount+currency+cobro
+    window._editExtraPayments = [];
+    if (Array.isArray(t.payments) && t.payments.length > 0) {
+      let foundPrincipal = false;
+      for (const p of t.payments) {
+        if (!foundPrincipal && p.amount === t.amount && (p.currency||'CUP') === (t.currency||'CUP') && (p.cobro||'') === (t.cobro||'')) {
+          foundPrincipal = true; continue;
+        }
+        if (p.is_tip) continue; // propina se maneja aparte
+        window._editExtraPayments.push({ amount: p.amount, currency: p.currency || 'CUP', cobro: p.cobro || 'efectivo' });
+      }
+    }
+    renderEditExtraPayments();
+
+    // Listener: si cambia el source (canal), mostrar/ocultar Marco crédito
+    if ($('et-source')) {
+      $('et-source').onchange = () => {
+        const s = $('et-source').value;
+        if ($('et-marco-credito-row')) $('et-marco-credito-row').style.display = (s === 'cinco') ? 'flex' : 'none';
+        if (s !== 'cinco' && $('et-marco-credito')) $('et-marco-credito').checked = false;
+      };
+    }
+
     // El chofer NO puede cambiar la fecha (solo admin). Tampoco el chofer
     // puede reasignar la carrera a otro driver.
     const isAdmin = currentUser && currentUser.role === 'admin';
@@ -4844,6 +4885,36 @@ async function openEditTrip(tripId, date) {
   } catch(e) {
     toast('Error: ' + e.message);
   }
+}
+
+// ── Render lista de pagos extras del modal edit ──
+function renderEditExtraPayments() {
+  const el = $('et-extra-list');
+  if (!el) return;
+  const arr = window._editExtraPayments || [];
+  if (!arr.length) { el.innerHTML = ''; return; }
+  el.innerHTML = arr.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:5px;font-size:11px">
+      <span style="flex:1">+ ${Math.round(p.amount).toLocaleString('es')} ${p.currency} · ${p.cobro === 'transferencia' ? '📲 Transfer' : '💵 Efectivo'}</span>
+      <button onclick="removeEditExtraPay(${i})" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:0 3px">✕</button>
+    </div>
+  `).join('');
+}
+function removeEditExtraPay(idx) {
+  if (!Array.isArray(window._editExtraPayments)) return;
+  window._editExtraPayments.splice(idx, 1);
+  renderEditExtraPayments();
+}
+// Modal pequeño para agregar otra moneda al edit (reutiliza el de registro pero
+// con un flag para saber dónde se agrega)
+let _addingExtraToEdit = false;
+function openExtraPayModalEdit() {
+  _addingExtraToEdit = true;
+  if ($('ep-amount')) $('ep-amount').value = '';
+  if ($('ep-currency')) $('ep-currency').value = 'CUP';
+  if ($('ep-cobro')) $('ep-cobro').value = 'efectivo';
+  $('modal-extra-pay').classList.add('show');
+  setTimeout(() => $('ep-amount')?.focus(), 100);
 }
 function closeEditTrip() {
   $('modal-edit-trip').classList.remove('show');
@@ -4892,24 +4963,52 @@ async function saveEditTrip() {
     });
   }
 
-  // Toggle pendiente de cobro: si cambia, ajustamos payment_status y payments[]
-  const wasPending = oldTrip?.payment_status === 'pending';
+  // Toggles: pendiente de cobro y Marco crédito
   const nowPending = !!$('et-pending')?.checked;
-  let payment_status = wasPending ? 'pending' : 'paid';
-  let payments = oldTrip?.payments;
-  if (nowPending && !wasPending) {
-    // Ahora pendiente: limpiar payments (la carrera no se cobró aún)
+  const nowMarcoCredito = (source === 'cinco' && !!$('et-marco-credito')?.checked);
+  const extras = Array.isArray(window._editExtraPayments) ? [...window._editExtraPayments] : [];
+  const nowIso = new Date().toISOString();
+
+  let payment_status = 'paid';
+  let payments;
+
+  if (nowPending) {
     payment_status = 'pending';
     payments = [];
-  } else if (!nowPending && wasPending) {
-    // Antes pendiente, ahora cobrada: crear payment principal con cobro/currency actuales
+  } else if (nowMarcoCredito) {
     payment_status = 'paid';
+    payments = []; // Marco crédito = no hay cobro real
+  } else {
+    // Construir payments: principal + extras
     payments = [{
       amount: amt, currency, cobro,
       status: initialPaymentStatus(cobro, source),
-      paid_at: new Date().toISOString()
+      paid_at: nowIso
     }];
+    for (const ep of extras) {
+      if (!ep || !ep.amount) continue;
+      payments.push({
+        amount: ep.amount,
+        currency: ep.currency || 'CUP',
+        cobro: ep.cobro || cobro,
+        status: initialPaymentStatus(ep.cobro || cobro, source),
+        paid_at: nowIso
+      });
+    }
   }
+
+  // Recalcular USD canónico sobre el bruto total (principal + extras)
+  let brutoUsdTotal = (amtUsd && amtUsd.usd) ? amtUsd.usd : 0;
+  for (const ep of extras) {
+    if (!ep || !ep.amount) continue;
+    if ((ep.currency || 'CUP').toUpperCase() === 'USD') brutoUsdTotal += ep.amount;
+    else {
+      const u = convertToUsd(ep.amount, ep.currency || 'CUP');
+      if (u) brutoUsdTotal += u.usd;
+    }
+  }
+  const commUsdTotal = Math.round(brutoUsdTotal * r) / 100;
+  const netUsdTotal = Math.round((brutoUsdTotal - commUsdTotal) * 100) / 100;
 
   const updates = {
     source, driverId, driverName,
@@ -4918,14 +5017,16 @@ async function saveEditTrip() {
     date: newDate, time: newTime,
     desc: $('et-desc').value.trim(),
     amount_usd: amtUsd ? amtUsd.usd : null,
-    commAmount_usd: comUsd ? comUsd.usd : null,
-    netAmount_usd: netUsd ? netUsd.usd : null,
+    commAmount_usd: commUsdTotal,
+    netAmount_usd: netUsdTotal,
+    bruto_total_usd: Math.round(brutoUsdTotal * 100) / 100,
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
     payment_status,
+    is_credito: nowMarcoCredito,
+    payments,
     modification_history: modHistory
   };
-  if (payments !== undefined) updates.payments = payments;
   try {
     // El campo date se actualiza in-place (PocketBase es flat, no hay path
     // anidado real). El polyfill encuentra el record por date+trip_id viejo
@@ -4963,9 +5064,16 @@ function addExtraPay() {
   if (!amt || amt <= 0) { toast('Monto inválido'); return; }
   const cur = $('ep-currency').value;
   const cob = $('ep-cobro').value;
-  window._extraPayments.push({ amount: amt, currency: cur, cobro: cob });
+  if (_addingExtraToEdit) {
+    if (!Array.isArray(window._editExtraPayments)) window._editExtraPayments = [];
+    window._editExtraPayments.push({ amount: amt, currency: cur, cobro: cob });
+    renderEditExtraPayments();
+    _addingExtraToEdit = false;
+  } else {
+    window._extraPayments.push({ amount: amt, currency: cur, cobro: cob });
+    renderExtraPaymentsList();
+  }
   closeExtraPayModal();
-  renderExtraPaymentsList();
 }
 function removeExtraPay(idx) {
   if (!Array.isArray(window._extraPayments)) return;
