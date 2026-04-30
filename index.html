@@ -1421,6 +1421,11 @@ audio{width:100%;height:36px;margin-top:6px}
       <input type="time" id="et-time" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
     </div>
     <input type="text" id="et-desc" placeholder="Descripción / nota" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <!-- Nota admin (solo visible/editable cuando role=admin) -->
+    <div id="et-admin-note-row" style="display:none;margin-bottom:6px">
+      <div style="font-size:11px;color:var(--am);font-weight:600;margin-bottom:3px">📝 Nota admin (queda resaltada en la carrera)</div>
+      <textarea id="et-admin-note" rows="2" placeholder="Aclaración o pregunta para resolver con el chofer antes de cobrar..." style="width:100%;padding:9px 10px;border:1px solid var(--ambrd);background:var(--ambg);border-radius:6px;font-size:13px;font-family:inherit;outline:none;resize:vertical"></textarea>
+    </div>
 
     <!-- Pagos adicionales (multi-denominación) -->
     <div style="font-size:11px;color:var(--txt2);margin-top:6px;font-weight:500">Pagos adicionales (otras monedas)</div>
@@ -3719,6 +3724,7 @@ function tripHTML(r, showDel) {
       </div>
       ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination || '—'}</div>` : ''}
       ${r.desc ? `<div class="ti-desc">${r.desc}</div>` : ''}
+      ${r.admin_note ? `<div style="margin-top:5px;padding:6px 8px;background:var(--ambg);border-left:3px solid var(--am);border-radius:4px;font-size:11px;color:var(--am);font-weight:500">📝 Admin: ${r.admin_note}</div>` : ''}
       ${audioHTML}
     </div>
     <div class="ti-right">
@@ -4846,6 +4852,11 @@ async function openEditTrip(tripId, date) {
     $('et-date').value = t.date || '';
     $('et-time').value = t.time || '';
     $('et-desc').value = t.desc || '';
+    if ($('et-admin-note')) $('et-admin-note').value = t.admin_note || '';
+    // Solo admin puede editar la nota; chofer la ve readonly
+    const isAdminEditing = currentUser && currentUser.role === 'admin';
+    if ($('et-admin-note-row')) $('et-admin-note-row').style.display = isAdminEditing ? 'block' : (t.admin_note ? 'block' : 'none');
+    if ($('et-admin-note')) $('et-admin-note').readOnly = !isAdminEditing;
     if ($('et-pending')) $('et-pending').checked = (t.payment_status === 'pending');
     if ($('et-marco-credito')) $('et-marco-credito').checked = !!t.is_credito;
     // El row de Marco crédito solo se muestra si canal=cinco
@@ -5027,6 +5038,10 @@ async function saveEditTrip() {
     payments,
     modification_history: modHistory
   };
+  // Nota admin: solo el admin puede escribir; si chofer edita, no la toca
+  if (currentUser && currentUser.role === 'admin') {
+    updates.admin_note = ($('et-admin-note')?.value || '').trim();
+  }
   try {
     // El campo date se actualiza in-place (PocketBase es flat, no hay path
     // anidado real). El polyfill encuentra el record por date+trip_id viejo
@@ -5535,10 +5550,15 @@ async function loadCaja() {
       } else if (p.status === 'pending_handover') {
         // Efectivo aún en manos del chofer
         const drv = t.driverId || '?';
-        if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {} };
+        if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {}, notes: [] };
         const cur = (p.currency || 'CUP').toUpperCase();
         if (!driverPending[drv].byCur[cur]) driverPending[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
         driverPending[drv].byCur[cur][p.cobro || 'efectivo'] += p.amount;
+        // Recopilar notas admin de las carreras pendientes (para mostrar al cobrar)
+        if (t.admin_note && idx === 0) driverPending[drv].notes.push({
+          date: t.date, time: t.time||'', text: t.admin_note,
+          source: t.source, amount: t.amount, currency: t.currency
+        });
       } else if (p.status === 'pending_verification') {
         // Transferencia recibida pero no verificada — sí entra a caja
         // (porque ya está en la cuenta) pero también queda en lista para que
@@ -5964,12 +5984,24 @@ function renderCajaPendingHandover(byDriver) {
         }
       }
     });
-    return `<div class="card" style="margin-bottom:8px;padding:12px">
+    const notesArr = Array.isArray(d.notes) ? d.notes : [];
+    const notesBadge = notesArr.length ? `<span style="background:var(--ambg);color:var(--am);border:1px solid var(--ambrd);border-radius:6px;padding:2px 6px;font-size:11px;font-weight:600;margin-left:8px">📝 ${notesArr.length} nota${notesArr.length===1?'':'s'}</span>` : '';
+    const notesBlock = notesArr.length
+      ? `<div style="margin-top:8px;padding:8px;background:var(--ambg);border:1px solid var(--ambrd);border-radius:6px">
+          <div style="font-size:11px;color:var(--am);font-weight:600;margin-bottom:4px">📝 Aclaraciones antes de cobrar:</div>
+          ${notesArr.map(n => `<div style="font-size:11px;color:var(--txt2);padding:3px 0;border-top:1px dashed var(--ambrd)">
+            <strong>${n.date} ${n.time}</strong> · ${SRC[n.source] || n.source} · ${Math.round(n.amount).toLocaleString('es')} ${n.currency}<br>
+            <em style="color:var(--am)">${n.text}</em>
+          </div>`).join('')}
+        </div>`
+      : '';
+    return `<div class="card" style="margin-bottom:8px;padding:12px${notesArr.length ? ';border-color:var(--ambrd);border-width:2px' : ''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-weight:600;font-size:15px">${d.name}</div>
+        <div style="font-weight:600;font-size:15px">${d.name}${notesBadge}</div>
         <div style="font-size:11px;color:var(--txt3)">≈ $${totalUsd.toFixed(2)} USD</div>
       </div>
       ${lines.join('') || '<div style="color:var(--txt3);font-size:12px">Sin efectivo pendiente</div>'}
+      ${notesBlock}
       <button class="btn btnacc" style="margin-top:10px;width:100%" onclick="markDriverHandover('${drvId}')">Recibí entrega completa de ${d.name}</button>
     </div>`;
   }).join('');
