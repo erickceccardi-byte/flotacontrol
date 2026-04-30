@@ -499,8 +499,8 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
         <div class="dcbtn" id="cb-wapp" onclick="selCanal('wapp')">
           <div class="dcdot wapp"></div>
-          <div class="dcname">WhatsApp</div>
-          <div class="dccom" id="lbl-wapp">10%</div>
+          <div class="dcname">Lorenzo</div>
+          <div class="dccom" id="lbl-wapp">USD transfer · 0%</div>
         </div>
         <div class="dcbtn" id="cb-nave" onclick="selCanal('nave')">
           <div class="dcdot nave"></div>
@@ -1146,7 +1146,7 @@ audio{width:100%;height:36px;margin-top:6px}
         <div class="g2">
           <div class="field"><label>La Nave (%)</label><input type="number" id="cfg-nave" value="20" min="0" max="100"></div>
           <div class="field"><label>Marco (%)</label><input type="number" id="cfg-cinco" value="10" min="0" max="100"></div>
-          <div class="field"><label>WhatsApp (%)</label><input type="number" id="cfg-wapp" value="10" min="0" max="100"></div>
+          <div class="field"><label>Lorenzo (%)</label><input type="number" id="cfg-wapp" value="0" min="0" max="100"></div>
           <div class="field"><label>Directa (%)</label><input type="number" value="0" readonly></div>
         </div>
         <button class="btn btnacc" onclick="saveCfg()">Guardar comisiones</button>
@@ -1397,7 +1397,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <select id="et-source" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
         <option value="directo">Directa</option>
         <option value="cinco">Marco</option>
-        <option value="wapp">WhatsApp</option>
+        <option value="wapp">Lorenzo</option>
         <option value="nave">La Nave</option>
         <option value="nave_billetera">Nave Billetera</option>
         <option value="adriana">Adriana</option>
@@ -1508,7 +1508,7 @@ const VEHICULOS = [
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
-const SRC = { nave:'La Nave', cinco:'Marco', wapp:'WhatsApp', directo:'Directa', nave_billetera:'Nave Billetera', adriana:'Adriana' };
+const SRC = { nave:'La Nave', cinco:'Marco', wapp:'Lorenzo', directo:'Directa', nave_billetera:'Nave Billetera', adriana:'Adriana' };
 const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave', adriana:'b-cinco' };
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
@@ -2859,6 +2859,18 @@ function selCanal(src) {
       $('co-efec').style.opacity = '0.4'; $('co-efec').style.pointerEvents = 'none';
       $('co-trans').style.opacity = '1';   $('co-trans').style.pointerEvents = 'none';
     }
+  } else if (src === 'wapp') {
+    // Lorenzo: SOLO USD transferencia. La carrera no entra a caja, va al
+    // fondo "Créditos Lorenzo" como deuda pendiente a pagar.
+    selCobroType = 'transferencia';
+    if ($('f-currency')) { $('f-currency').value = 'USD'; $('f-currency').disabled = true; }
+    if (pagoSection) {
+      pagoSection.style.display = '';
+      $('co-efec').className = 'dpbtn';
+      $('co-trans').className = 'dpbtn sel-trans';
+      $('co-efec').style.opacity = '0.4'; $('co-efec').style.pointerEvents = 'none';
+      $('co-trans').style.opacity = '1';   $('co-trans').style.pointerEvents = 'none';
+    }
   } else {
     // Restaurar selectores libres si veníamos de Adriana
     if ($('f-currency')) $('f-currency').disabled = false;
@@ -2910,11 +2922,14 @@ function selMarcoTipo(t) {
 
 function getCom(s) {
   const cfg = getCfg();
-  const c = cfg.commissions || { nave:20, cinco:10, wapp:10 };
+  const c = cfg.commissions || { nave:20, cinco:10, wapp:0 };
+  // Si wapp viene como undefined o como el viejo default 10, lo bajamos a 0
+  // (Lorenzo pagó por adelantado, comisión por ahora 0%, editable en Config)
+  const wappRate = (typeof c.wapp === 'number') ? c.wapp : 0;
   return {
     nave: c.nave||20,
     cinco: c.cinco||10,
-    wapp: c.wapp||10,
+    wapp: wappRate,
     directo: 0,
     nave_billetera: c.nave||20,  // misma comisión que La Nave
     adriana: 0                    // Adriana ya pagó adelantado, sin comisión
@@ -2967,7 +2982,7 @@ function updComLabels() {
   const c = cfg.commissions || {};
   if ($('lbl-nave'))  $('lbl-nave').textContent  = (c.nave||20)  + '%';
   if ($('lbl-cinco')) $('lbl-cinco').textContent = (c.cinco||10) + '%';
-  if ($('lbl-wapp'))  $('lbl-wapp').textContent  = (c.wapp||10)  + '%';
+  if ($('lbl-wapp'))  $('lbl-wapp').textContent  = 'USD transfer · ' + (typeof c.wapp === 'number' ? c.wapp : 0) + '%';
 }
 
 async function regTrip() {
@@ -2982,12 +2997,15 @@ async function regTrip() {
   // recibidos. Se cobrará después y el admin (o el chofer) la marca cobrada.
   const pendingCollection = !!$('f-pending')?.checked;
   // Para Nave Billetera no se pide forma de cobro (el dinero no entra a caja).
-  // Lo mismo para Marco crédito (Marco cubre el costo, no hay cobro al cliente).
+  // Lo mismo para Marco crédito y Lorenzo (siempre crédito automático).
   const isMarcoCredito = (selCan === 'cinco' && marcoTipo === 'credito');
+  const isLorenzo      = (selCan === 'wapp');
   if (selCan === 'nave_billetera') {
     selCobroType = 'billetera';
   } else if (isMarcoCredito) {
     selCobroType = 'credito_marco';
+  } else if (isLorenzo) {
+    selCobroType = 'transferencia'; // forzado, USD transfer
   } else if (!selCobroType && !pendingCollection) {
     toast('Selecciona la forma de cobro'); return;
   }
@@ -3056,9 +3074,9 @@ async function regTrip() {
   if (pendingCollection) {
     paymentStatus = 'pending';
     payments = [];
-  } else if (isMarcoCredito) {
-    // Marco crédito: la carrera no se cobra al cliente, no hay payment.
-    // El monto entra a la "deuda Marco" (admin lo ve en Caja).
+  } else if (isMarcoCredito || isLorenzo) {
+    // Marco crédito / Lorenzo: la carrera no se cobra al cliente, no hay
+    // payment. El monto entra a la "deuda canal" (admin lo ve en Caja).
     paymentStatus = 'paid';
     payments = [];
   } else {
@@ -3120,8 +3138,8 @@ async function regTrip() {
     // Pagos multi-denominación + estado de cobro de la carrera
     payments,
     payment_status: paymentStatus,
-    // Crédito Marco: la carrera no genera cobro, suma a la deuda Marco
-    is_credito: !!isMarcoCredito,
+    // Crédito Marco/Lorenzo: la carrera no genera cobro, suma a la deuda
+    is_credito: !!(isMarcoCredito || isLorenzo),
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value || '',
     destination: $('f-dst').value || '',
@@ -4364,7 +4382,7 @@ GPS (Traccar):\n${gpsL}\n\nIngresos por conductor:\n${incL}
 
 Totales: ${Math.round(bruto).toLocaleString()} bruto · ${Math.round(com).toLocaleString()} comisiones · ${Math.round(neto).toLocaleString()} neto · ${totalKm} km · ${cpm} CUP/km · ${trips.length} carreras
 
-Contexto: autos eléctricos, radio 170km desde La Habana. Comisiones: La Nave ${comm.nave||20}%, Marco ${comm.cinco||10}%, WhatsApp ${comm.wapp||10}%, Directas 0%. Se registra si el cobro fue en efectivo o transferencia.
+Contexto: autos eléctricos, radio 170km desde La Habana. Comisiones: La Nave ${comm.nave||20}%, Marco ${comm.cinco||10}%, Lorenzo ${comm.wapp||0}%, Directas 0%. Se registra si el cobro fue en efectivo o transferencia.
 
 Dame:
 1. Rendimiento general del día (2 líneas)
@@ -5290,8 +5308,8 @@ async function delMovimiento(movId) {
   catch(e) { toast('Error: ' + e.message); }
 }
 
-// ── Pagos a canales (La Nave, Marco, WhatsApp) ──
-const CANAL_NAMES = { nave: 'La Nave', cinco: 'Marco', wapp: 'WhatsApp' };
+// ── Pagos a canales (La Nave, Marco, Lorenzo) ──
+const CANAL_NAMES = { nave: 'La Nave', cinco: 'Marco', wapp: 'Lorenzo' };
 
 async function registrarPagoCanal(canal) {
   const inp = $(`pcan-${canal}-amt`);
@@ -5539,6 +5557,7 @@ async function loadCaja() {
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
+    if (t.source === 'wapp') return; // Lorenzo siempre crédito: no afecta caja
     if (t.payment_status === 'pending') return; // carrera todavía no cobrada → no afecta caja
     const pays = getTripPayments(t);
     pays.forEach((p, idx) => {
@@ -5623,12 +5642,14 @@ async function loadCaja() {
     if (canal === 'nave_billetera') {
       billeteraAutoPagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
     }
-    // Marco crédito: el BRUTO 100% de la carrera suma a "Marco nos debe".
-    // La comisión 10% queda contabilizada APARTE como deuda hacia Marco
-    // (ya se le acreditó en comisionAcum). El saldo neto sale correcto:
-    //   bruto Marco debe (1000) − comisión empresa debe (100) = 900 a favor empresa
+    // Marco crédito y Lorenzo (siempre crédito): el BRUTO 100% suma a
+    // "el canal nos debe". La comisión queda como deuda separada hacia
+    // ellos (acreditada en comisionAcum).
     if (canal === 'cinco' && t.is_credito) {
       creditoCons.cinco += getTripUsd(t, 'amount');
+    }
+    if (canal === 'wapp') {
+      creditoCons.wapp += getTripUsd(t, 'amount');
     }
   });
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
@@ -5694,12 +5715,13 @@ async function loadCaja() {
             usd: commUsd, sign: '+'
           });
         }
-        // Crédito Marco: carrera adicional como item separado (bruto 100%)
-        if (canal === 'cinco' && c === 'cinco' && t.is_credito) {
+        // Crédito Marco / Lorenzo: carrera adicional como item separado (bruto 100%)
+        if ((canal === 'cinco' && c === 'cinco' && t.is_credito) || (canal === 'wapp' && c === 'wapp')) {
+          const cLabel = canal === 'wapp' ? 'Lorenzo' : 'Marco';
           items.push({
             kind: 'credito',
             date: t.date, time: t.time || '',
-            label: `📒 Crédito Marco · ${t.driverName || '?'}`,
+            label: `📒 Crédito ${cLabel} · ${t.driverName || '?'}`,
             sub: `${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'} carrera (bruto)`,
             usd: getTripUsd(t, 'amount'), sign: '+'
           });
@@ -5753,7 +5775,8 @@ async function loadCaja() {
 
       const saldoCol = saldo > 0 ? 'var(--g)' : (saldo < 0 ? 'var(--re)' : 'var(--txt2)');
       const saldoLbl = saldo > 0 ? `${cName} nos debe` : (saldo < 0 ? `Le debemos a ${cName}` : 'En cero');
-      const showCobrarBtn = (canal === 'cinco');
+      // Marco y Lorenzo pueden tener carreras crédito que les generan deuda → ambos muestran "Cobrar"
+      const showCobrarBtn = (canal === 'cinco' || canal === 'wapp');
 
       return `
         <div class="card" style="margin-bottom:10px;padding:10px 12px">
@@ -5878,6 +5901,7 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
+    if (t.source === 'wapp') return; // Lorenzo siempre crédito: no afecta caja
     const monto = (t.amount || 0) + (t.tipAmount || 0);
     if (!monto) return;
     ops.push({
@@ -6030,6 +6054,7 @@ async function markDriverHandover(driverId) {
         // Excluir nave_billetera (no afecta caja)
         if (t.source === 'nave_billetera' || t.cobro === 'billetera') continue;
         if (t.source === 'cinco' && t.is_credito) continue; // Marco crédito
+        if (t.source === 'wapp') continue; // Lorenzo siempre crédito
 
         let newPays;
         let changed = false;
