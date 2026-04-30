@@ -5603,9 +5603,12 @@ async function loadCaja() {
     if (canal === 'nave_billetera') {
       billeteraAutoPagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
     }
-    // Marco crédito: el NETO de la carrera suma a "Marco nos debe" (creditoCons)
+    // Marco crédito: el BRUTO 100% de la carrera suma a "Marco nos debe".
+    // La comisión 10% queda contabilizada APARTE como deuda hacia Marco
+    // (ya se le acreditó en comisionAcum). El saldo neto sale correcto:
+    //   bruto Marco debe (1000) − comisión empresa debe (100) = 900 a favor empresa
     if (canal === 'cinco' && t.is_credito) {
-      creditoCons.cinco += getTripUsd(t, 'netAmount');
+      creditoCons.cinco += getTripUsd(t, 'amount');
     }
   });
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
@@ -5671,14 +5674,14 @@ async function loadCaja() {
             usd: commUsd, sign: '+'
           });
         }
-        // Crédito Marco: carrera adicional como item separado
+        // Crédito Marco: carrera adicional como item separado (bruto 100%)
         if (canal === 'cinco' && c === 'cinco' && t.is_credito) {
           items.push({
             kind: 'credito',
             date: t.date, time: t.time || '',
             label: `📒 Crédito Marco · ${t.driverName || '?'}`,
-            sub: `${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'} carrera`,
-            usd: getTripUsd(t, 'netAmount'), sign: '+'
+            sub: `${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'} carrera (bruto)`,
+            usd: getTripUsd(t, 'amount'), sign: '+'
           });
         }
       });
