@@ -5640,76 +5640,117 @@ async function loadCaja() {
   if (canalesEl) {
     const fmtU = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
     canalesEl.innerHTML = ['nave','cinco','wapp'].map(canal => {
-      const acum = comisionAcum[canal];     // empresa debe al canal (comisiones)
-      const pag  = pagadoCanal[canal];      // ya pagado al canal
-      const cred = creditoCons[canal];      // canal debe a empresa (carreras crédito, solo Marco)
-      const cob  = cobradoCanal[canal];     // canal ya nos pagó
-      // Saldo desde la perspectiva "qué nos debe el canal":
-      //   positivo (verde) → canal nos debe
-      //   negativo (rojo)  → empresa le debe al canal
-      // saldo = (carreras crédito + cobros recibidos) - (comisiones acum + pagos a canal)
+      const acum = comisionAcum[canal];     // comisiones acumuladas (empresa debe)
+      const pag  = pagadoCanal[canal];      // pagado al canal (sale de caja)
+      const cred = creditoCons[canal];      // crédito consumido (Marco debe, solo cinco)
+      const cob  = cobradoCanal[canal];     // cobrado al canal (entra a caja)
       const saldo = (cred + cob) - (acum + pag);
       const cName = CANAL_NAMES[canal];
-      const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal).sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
-      const cobrosDeEsteCanal = cobrosCanalDelRange.filter(p => p.canal === canal).sort((a,b) => (b.received_at||'').localeCompare(a.received_at||''));
+      const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal);
+      const cobrosDeEsteCanal = cobrosCanalDelRange.filter(p => p.canal === canal);
 
-      const pagosHTML = pagosDeEsteCanal.length
-        ? pagosDeEsteCanal.map(p => {
-            const fecha = (p.paid_at ? new Date(p.paid_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
-            const hora  = p.paid_at ? new Date(p.paid_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
-            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
-              <span style="color:var(--txt2)">↗ Pagamos ${fecha} ${hora ? '· ' + hora : ''}</span>
-              <span style="font-weight:500;color:var(--re)">−$${Math.round(p.amount).toLocaleString('es')} USD</span>
-              <button onclick="delPagoCanal('${canal}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:1px 5px">✕</button>
+      // Construir lista cronológica deslizable con TODOS los movimientos del canal:
+      //   - Comisiones (cada carrera del canal aporta una comisión)
+      //   - Crédito Marco (cada carrera crédito aumenta la deuda del canal)
+      //   - Pagos al canal (egreso de caja)
+      //   - Cobros del canal (ingreso a caja)
+      const items = [];
+      // Comisiones por carrera
+      trips.forEach(t => {
+        const c = t.source;
+        if (canal === 'nave') {
+          if (c !== 'nave' && c !== 'nave_billetera') return;
+        } else if (c !== canal) return;
+        const commUsd = getTripUsd(t, 'commAmount');
+        if (commUsd > 0) {
+          items.push({
+            kind: 'comision',
+            date: t.date, time: t.time || '',
+            label: `${t.driverName || '?'} · ${SRC[t.source] || t.source}`,
+            sub: `${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'} × ${t.commRate||0}%`,
+            usd: commUsd, sign: '+'
+          });
+        }
+        // Crédito Marco: carrera adicional como item separado
+        if (canal === 'cinco' && c === 'cinco' && t.is_credito) {
+          items.push({
+            kind: 'credito',
+            date: t.date, time: t.time || '',
+            label: `📒 Crédito Marco · ${t.driverName || '?'}`,
+            sub: `${Math.round(t.amount).toLocaleString('es')} ${t.currency||'CUP'} carrera`,
+            usd: getTripUsd(t, 'netAmount'), sign: '+'
+          });
+        }
+      });
+      // Pagos al canal
+      pagosDeEsteCanal.forEach(p => {
+        const dt = p.paid_at || (p.date + 'T12:00:00');
+        items.push({
+          kind: 'pago',
+          date: p.date, time: dt.slice(11,16),
+          label: `↗ Pagamos a ${cName}`,
+          sub: 'USD efectivo',
+          usd: p.amount_usd || p.amount || 0, sign: '-',
+          delAction: `delPagoCanal('${canal}','${p.id}')`
+        });
+      });
+      // Cobros del canal (entra a caja)
+      cobrosDeEsteCanal.forEach(p => {
+        const dt = p.received_at || (p.date + 'T12:00:00');
+        items.push({
+          kind: 'cobro',
+          date: p.date, time: dt.slice(11,16),
+          label: `↙ Cobramos a ${cName}`,
+          sub: `${Math.round(p.amount).toLocaleString('es')} ${p.currency} ${p.cobro==='transferencia'?'transfer':'efectivo'}`,
+          usd: p.amount_usd || (p.currency === 'USD' ? p.amount : 0), sign: '+',
+          delAction: `delCobroCanal('${canal}','${p.id||p.cobro_id}')`
+        });
+      });
+      // Sort cronológico inverso
+      items.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
+
+      const itemsHTML = items.length
+        ? items.map(it => {
+            const color = it.sign === '+' && (it.kind === 'cobro' || it.kind === 'credito') ? 'var(--g)' :
+                          it.sign === '+' ? 'var(--am)' :   // comisión es deuda con canal (color ámbar)
+                          'var(--re)';
+            const icon = it.kind === 'comision' ? '%' : it.kind === 'credito' ? '📒' : it.kind === 'pago' ? '↗' : '↙';
+            const delBtn = it.delAction ? `<button onclick="${it.delAction}" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:12px;padding:0 4px;flex-shrink:0">✕</button>` : '';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid var(--brd);font-size:11px">
+              <span style="font-size:13px;line-height:1;flex-shrink:0;width:14px;text-align:center">${icon}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.label}</div>
+                <div style="font-size:10px;color:var(--txt3)">${it.date} ${it.time ? '· ' + it.time : ''} · ${it.sub}</div>
+              </div>
+              <div style="white-space:nowrap;flex-shrink:0;color:${color};font-weight:600">${it.sign}${fmtU(it.usd)}</div>
+              ${delBtn}
             </div>`;
           }).join('')
-        : '';
-      const cobrosHTML = cobrosDeEsteCanal.length
-        ? cobrosDeEsteCanal.map(p => {
-            const fecha = (p.received_at ? new Date(p.received_at) : new Date(p.date + 'T12:00:00')).toLocaleDateString('es', {day:'numeric', month:'short'});
-            const hora  = p.received_at ? new Date(p.received_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'}) : '';
-            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
-              <span style="color:var(--txt2)">↙ Cobramos ${fecha} ${hora ? '· ' + hora : ''}</span>
-              <span style="font-weight:500;color:var(--g)">+${Math.round(p.amount).toLocaleString('es')} ${p.currency}</span>
-              <button onclick="delCobroCanal('${canal}','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:1px 5px">✕</button>
-            </div>`;
-          }).join('')
-        : '';
+        : '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:11px">Sin movimientos en este período.</div>';
 
-      // Color del saldo: verde si Marco nos debe, rojo si empresa le debe
       const saldoCol = saldo > 0 ? 'var(--g)' : (saldo < 0 ? 'var(--re)' : 'var(--txt2)');
       const saldoLbl = saldo > 0 ? `${cName} nos debe` : (saldo < 0 ? `Le debemos a ${cName}` : 'En cero');
-      // Solo Marco tiene botón "Cobrar" (es el único canal con carreras crédito)
       const showCobrarBtn = (canal === 'cinco');
 
       return `
-        <div class="card" style="margin-bottom:8px;padding:10px 12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <strong style="color:var(--txt)">${cName}</strong>
+        <div class="card" style="margin-bottom:10px;padding:10px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <strong style="color:var(--txt);font-size:14px">${cName}</strong>
             <span style="font-size:11px;color:${saldoCol};font-weight:600">${saldoLbl}</span>
           </div>
           <div style="text-align:center;padding:8px 0;border-top:1px solid var(--brd);border-bottom:1px solid var(--brd)">
             <div style="font-size:22px;font-weight:700;color:${saldoCol}">${saldo >= 0 ? '' : '-'}${fmtU(Math.abs(saldo))}</div>
+            <div style="font-size:10px;color:var(--txt3);margin-top:2px">${items.length} movimiento${items.length===1?'':'s'} · período actual</div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
-            <span>Comisiones acum:</span><span>+${fmtU(acum)}</span>
-          </div>
-          ${cred > 0 ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
-            <span>Carreras crédito:</span><span style="color:var(--g)">+${fmtU(cred)}</span>
-          </div>` : ''}
-          <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
-            <span>Pagado al canal:</span><span style="color:var(--re)">${pag ? '-' + fmtU(pag) : '—'}</span>
-          </div>
-          ${cob > 0 ? `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:var(--txt2)">
-            <span>Cobrado del canal:</span><span style="color:var(--g)">+${fmtU(cob)}</span>
-          </div>` : ''}
           <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
             <input type="number" id="pcan-${canal}-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:7px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
             <span style="font-size:11px;color:var(--txt3)">USD ef.</span>
             <button class="btn" onclick="registrarPagoCanal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↗ Pagar</button>
             ${showCobrarBtn ? `<button class="btn btnacc" onclick="openCobroCanalModal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↙ Cobrar</button>` : ''}
           </div>
-          ${(pagosHTML || cobrosHTML) ? `<div style="margin-top:8px">${pagosHTML}${cobrosHTML}</div>` : ''}
+          <div style="margin-top:8px;background:var(--bg);border:1px solid var(--brd);border-radius:8px;max-height:280px;overflow-y:auto;padding:0">
+            ${itemsHTML}
+          </div>
         </div>`;
     }).join('');
   }
