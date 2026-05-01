@@ -521,6 +521,32 @@ audio{width:100%;height:36px;margin-top:6px}
             <div class="dccom" style="color:#9d2562">CUP transferencia · 0%</div>
           </div>
         </div>
+        <div class="dcbtn" id="cb-socios" onclick="selCanal('socios')" style="grid-column:1/-1;background:#EEF2FF;border-color:#6366F1">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+            <div class="dcdot" style="background:#6366F1"></div>
+            <div class="dcname">Socios</div>
+            <div class="dccom" style="color:#4338CA">Erick · Antonio · Adriana · 15% chofer</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-selector de socio (Erick / Antonio / Adriana) — solo si canal=socios -->
+    <div class="d-section" id="d-socio-pick" style="display:none">
+      <div class="d-lbl">Socio</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <div class="dpbtn" id="sc-erick" onclick="selSocio('erick')" style="min-height:44px">
+          <span class="dpicon">👤</span><span class="dptxt">Erick</span>
+        </div>
+        <div class="dpbtn" id="sc-antonio" onclick="selSocio('antonio')" style="min-height:44px">
+          <span class="dpicon">👤</span><span class="dptxt">Antonio</span>
+        </div>
+        <div class="dpbtn" id="sc-adriana" onclick="selSocio('adriana')" style="min-height:44px">
+          <span class="dpicon">👤</span><span class="dptxt">Adriana</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.3">
+        El socio acumula deuda con la empresa. El chofer recibe 15% del bruto. No entra a caja.
       </div>
     </div>
 
@@ -978,6 +1004,12 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-adriana"></div>
 
+      <div class="sh">👥 Socios — saldo por cada uno</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Cada socio (Erick, Antonio, Adriana) acumula su deuda con la empresa. Las carreras suman al saldo positivo (socio te debe). Los pagos del socio bajan el saldo (puede quedar negativo si pagó de más).
+      </div>
+      <div id="caja-socios"></div>
+
       <div class="sh">Pendiente de entrega de choferes</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
         Efectivo cobrado por choferes que aún no fue entregado. Cuando el chofer te traiga el dinero, marcá <strong>"Recibí entrega"</strong> y entrará a caja.
@@ -1355,6 +1387,40 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: COBRO DE SOCIO ═══════════ -->
+<div id="modal-pago-socio" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Registrar cobro de socio</div>
+    <input type="hidden" id="ps-socio">
+    <div style="font-size:13px;color:var(--txt2);margin-bottom:8px">
+      Cobrando a: <strong id="ps-socio-name" style="color:var(--txt)"></strong>
+    </div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Este cobro entra a Caja como ingreso real y baja el saldo del socio. Si el socio te pagó más de lo que debe, su saldo queda en negativo (la empresa le debe).
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="number" id="ps-amount" placeholder="Monto" inputmode="decimal" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="ps-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="USD">USD</option>
+        <option value="CUP">CUP</option>
+        <option value="EUR">EUR</option>
+      </select>
+      <select id="ps-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transferencia</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="date" id="ps-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+    </div>
+    <input type="text" id="ps-note" placeholder="Nota (opcional)" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closePagoSocioModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="savePagoSocio()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: GASTO DEL CHOFER ═══════════ -->
 <div id="modal-gasto" class="dmodal">
   <div class="dmodal-card">
@@ -1404,6 +1470,7 @@ audio{width:100%;height:36px;margin-top:6px}
         <option value="nave">La Nave</option>
         <option value="nave_billetera">Nave Billetera</option>
         <option value="adriana">Adriana</option>
+        <option value="socios">Socios</option>
       </select>
       <select id="et-driver" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none"></select>
     </div>
@@ -1440,6 +1507,16 @@ audio{width:100%;height:36px;margin-top:6px}
       <input type="checkbox" id="et-marco-credito" style="margin:0;flex-shrink:0">
       <span>Carrera <strong>Marco crédito</strong> (Marco cubre, no entra a caja)</span>
     </label>
+
+    <!-- Socio (solo si canal=socios) -->
+    <div id="et-socio-row" style="display:none;margin:8px 0 0">
+      <div style="font-size:11px;color:var(--txt2);font-weight:500;margin-bottom:4px">Socio</div>
+      <select id="et-socio" style="width:100%;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="erick">Erick</option>
+        <option value="antonio">Antonio</option>
+        <option value="adriana">Adriana</option>
+      </select>
+    </div>
 
     <label style="display:flex;align-items:center;gap:6px;margin:6px 0 0;font-size:12px;color:var(--txt2);cursor:pointer">
       <input type="checkbox" id="et-pending" style="margin:0;flex-shrink:0">
@@ -1511,12 +1588,21 @@ const VEHICULOS = [
 ];
 const DB_NAME = 'flotacontrol_db';
 const DB_VER = 2;
-const SRC = { nave:'La Nave', cinco:'Marco', wapp:'Lorenzo', directo:'Directa', nave_billetera:'Nave Billetera', adriana:'Adriana' };
-const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave', adriana:'b-cinco' };
+const SRC = { nave:'La Nave', cinco:'Marco', wapp:'Lorenzo', directo:'Directa', nave_billetera:'Nave Billetera', adriana:'Adriana', socios:'Socios' };
+const BDGE = { nave:'b-nave', cinco:'b-cinco', wapp:'b-wapp', directo:'b-directo', nave_billetera:'b-nave', adriana:'b-cinco', socios:'b-cinco' };
 const COLS = [['#E6F1FB','#185FA5'],['#EAF3DE','#3B6D11'],['#FAEEDA','#854F0B'],['#E1F5EE','#0F6E56'],['#EEEDFE','#534AB7']];
 
+// Socios (canal "socios"): cada uno acumula deuda con la empresa.
+// Se cobra al chofer 15% del bruto como salario directo (sin bono).
+// El bruto NO entra a caja — se acumula en el saldo del socio.
+const SOCIOS_LIST = [
+  { id: 'erick',   name: 'Erick'   },
+  { id: 'antonio', name: 'Antonio' },
+  { id: 'adriana', name: 'Adriana' },
+];
+
 let currentUser = null;
-let selCan = null, selCobroType = null;
+let selCan = null, selCobroType = null, selSocioId = null;
 let marcoTipo = 'cobrada'; // 'cobrada' | 'credito' — solo aplica si selCan==='cinco'
 let idbDB = null;
 let isOnline = navigator.onLine;
@@ -1708,6 +1794,7 @@ const PB_PATHS = {
   gastos_chofer:     { coll: 'gastos_chofer',     keys: ['gasto_id'] },
   gps_daily:         { coll: 'gps_daily',         keys: ['date',     'driverId'] },
   anticipos_adriana: { coll: 'anticipos_adriana', keys: ['anticipo_id'] },
+  pagos_socio:       { coll: 'pagos_socio',       keys: ['pago_id'] },
   // 'caja/saldo_inicial' es un singleton manejado aparte
 };
 
@@ -2642,12 +2729,19 @@ async function loadDetalle() {
   const tripsFacturados = trips.filter(t =>
     !(t.source === 'cinco' && t.is_credito) &&
     t.source !== 'wapp' &&
+    t.source !== 'socios' &&
     t.payment_status !== 'pending'
   );
+  // Carreras de socios: incluyen al chofer en el salario (15% directo)
+  // pero no en los totales "Bruto / Comisión / Neto" del periodo (no son
+  // ingreso real hasta que el socio pague).
+  const tripsSocios = trips.filter(t => t.source === 'socios');
   const brutoUsd = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
   const comUsd   = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
   const netoUsd  = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
   const tipUsd   = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'tipAmount'), 0);
+  // Salario base = neto facturado + bruto de socios (chofer cobra 15% del bruto del socio)
+  const salaryBaseUsd = netoUsd + tripsSocios.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
   const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
   $('det-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
   $('det-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
@@ -2686,7 +2780,7 @@ async function loadDetalle() {
   // ── Salario ──
   const salaryPct = getSalaryPercent();
   if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${salaryPct}% del neto)`;
-  const salarioUsd = netoUsd * (salaryPct / 100);
+  const salarioUsd = salaryBaseUsd * (salaryPct / 100);
   const salarioCup = (cupRate && salarioUsd) ? Math.round(salarioUsd * cupRate) : null;
   const pagadoSalUsd = sumarPagosUsd(pagosSalario);
   const pagadoSalCup = (cupRate && pagadoSalUsd) ? Math.round(pagadoSalUsd * cupRate) : null;
@@ -2770,12 +2864,13 @@ async function loadDetalle() {
       results.forEach(day => Object.values(day).forEach(t => { if (t && typeof t === 'object' && t.driverId === driverId) trips90.push(t); }));
     } catch(e) {}
   }
-  // Bono trimestral: excluye Adriana (prepago, ya cobrado) y carreras a
-  // crédito (Marco crédito + Lorenzo, todavía no cobradas — solo cuentan
-  // cuando el canal paga su deuda). Pendientes de cobro tampoco aplican.
+  // Bono trimestral: excluye Adriana (prepago), Socios (sin bono explícito),
+  // y carreras a crédito (Marco crédito + Lorenzo). Pendientes de cobro
+  // tampoco aplican. El bono solo se calcula sobre carreras "facturadas".
   const netoBase90 = trips90
     .filter(t => t
       && t.source !== 'adriana'
+      && t.source !== 'socios'
       && !(t.source === 'cinco' && t.is_credito)
       && t.source !== 'wapp'
       && t.payment_status !== 'pending'
@@ -2948,6 +3043,42 @@ function selCanal(src) {
       marcoTipo = 'cobrada';
     }
   }
+  // Socios: mostrar sub-selector (Erick/Antonio/Adriana) debajo del canal
+  const socioPickSection = $('d-socio-pick');
+  if (socioPickSection) {
+    if (src === 'socios') {
+      socioPickSection.style.display = '';
+      // Limpiar selección anterior
+      ['erick','antonio','adriana'].forEach(s => {
+        const el = $('sc-' + s);
+        if (el) el.className = 'dpbtn';
+      });
+      selSocioId = null;
+    } else {
+      socioPickSection.style.display = 'none';
+      selSocioId = null;
+    }
+  }
+
+  // Socios: la carrera NO entra a caja. El bruto se acumula al saldo del
+  // socio. Cobro = "fondo socio" — efectivo y transferencia se desactivan.
+  if (src === 'socios') {
+    selCobroType = 'socio_credit';
+    if ($('f-currency')) $('f-currency').disabled = false;
+    if (pagoSection) {
+      pagoSection.style.display = '';
+      $('co-efec').className = 'dpbtn';
+      $('co-trans').className = 'dpbtn';
+      $('co-efec').style.opacity = '0.4'; $('co-efec').style.pointerEvents = 'none';
+      $('co-trans').style.opacity = '0.4'; $('co-trans').style.pointerEvents = 'none';
+    }
+    updNet();
+    return;
+  }
+  // Si veníamos de socios y ahora elegimos otro canal, restaurar
+  if (selCobroType === 'socio_credit') selCobroType = null;
+  if ($('co-efec')) { $('co-efec').style.opacity = ''; $('co-efec').style.pointerEvents = ''; }
+  if ($('co-trans')) { $('co-trans').style.opacity = ''; $('co-trans').style.pointerEvents = ''; }
 
   // Adriana: SOLO CUP transferencia. Forzamos los selectores y los
   // bloqueamos para que el chofer no pueda cambiar.
@@ -2998,9 +3129,22 @@ function selCanal(src) {
 }
 
 function selCobro(type) {
+  // Si el canal es Socios o Marco crédito, no permitir efectivo/transferencia
+  if (selCan === 'socios') return;
+  if (selCan === 'cinco' && marcoTipo === 'credito') return;
   selCobroType = type;
   $('co-efec').className = 'dpbtn' + (type === 'efectivo' ? ' sel-efec' : '');
   $('co-trans').className = 'dpbtn' + (type === 'transferencia' ? ' sel-trans' : '');
+}
+
+// Selector de socio (canal Socios)
+function selSocio(s) {
+  selSocioId = s;
+  ['erick','antonio','adriana'].forEach(x => {
+    const el = $('sc-' + x);
+    if (el) el.className = 'dpbtn' + (x === s ? ' sel-trans' : '');
+  });
+  updNet();
 }
 
 // Selector Cobrada/Crédito para canal Marco
@@ -3034,7 +3178,8 @@ function getCom(s) {
     wapp: wappRate,
     directo: 0,
     nave_billetera: c.nave||20,  // misma comisión que La Nave
-    adriana: 0                    // Adriana ya pagó adelantado, sin comisión
+    adriana: 0,                   // Adriana ya pagó adelantado, sin comisión
+    socios: 0                     // Socios: sin comisión de canal — chofer cobra 15% directo
   }[s] ?? 0;
 }
 
@@ -3099,15 +3244,21 @@ async function regTrip() {
   // recibidos. Se cobrará después y el admin (o el chofer) la marca cobrada.
   const pendingCollection = !!$('f-pending')?.checked;
   // Para Nave Billetera no se pide forma de cobro (el dinero no entra a caja).
-  // Lo mismo para Marco crédito y Lorenzo (siempre crédito automático).
+  // Lo mismo para Marco crédito, Lorenzo y Socios (siempre crédito automático).
   const isMarcoCredito = (selCan === 'cinco' && marcoTipo === 'credito');
   const isLorenzo      = (selCan === 'wapp');
+  const isSocios       = (selCan === 'socios');
+  if (isSocios && !selSocioId) {
+    toast('Selecciona el socio (Erick / Antonio / Adriana)'); return;
+  }
   if (selCan === 'nave_billetera') {
     selCobroType = 'billetera';
   } else if (isMarcoCredito) {
     selCobroType = 'credito_marco';
   } else if (isLorenzo) {
     selCobroType = 'transferencia'; // forzado, USD transfer
+  } else if (isSocios) {
+    selCobroType = 'socio_credit';
   } else if (!selCobroType && !pendingCollection) {
     toast('Selecciona la forma de cobro'); return;
   }
@@ -3176,9 +3327,10 @@ async function regTrip() {
   if (pendingCollection) {
     paymentStatus = 'pending';
     payments = [];
-  } else if (isMarcoCredito || isLorenzo) {
-    // Marco crédito / Lorenzo: la carrera no se cobra al cliente, no hay
-    // payment. El monto entra a la "deuda canal" (admin lo ve en Caja).
+  } else if (isMarcoCredito || isLorenzo || isSocios) {
+    // Marco crédito / Lorenzo / Socios: la carrera no se cobra al cliente,
+    // no hay payment. El monto entra a la "deuda canal/socio" (admin lo ve
+    // en Caja → Comisiones / Socios).
     paymentStatus = 'paid';
     payments = [];
   } else {
@@ -3240,8 +3392,10 @@ async function regTrip() {
     // Pagos multi-denominación + estado de cobro de la carrera
     payments,
     payment_status: paymentStatus,
-    // Crédito Marco/Lorenzo: la carrera no genera cobro, suma a la deuda
-    is_credito: !!(isMarcoCredito || isLorenzo),
+    // Crédito Marco/Lorenzo/Socios: la carrera no genera cobro, suma a la
+    // deuda del canal o del socio. Para Socios además guardamos qué socio.
+    is_credito: !!(isMarcoCredito || isLorenzo || isSocios),
+    socio: isSocios ? selSocioId : null,
     desc: $('f-desc').value.trim(),
     origin: $('f-org').value || '',
     destination: $('f-dst').value || '',
@@ -3286,11 +3440,16 @@ async function regTrip() {
   // Reset selección de canal y forma de pago (limpia botones resaltados)
   selCan = null;
   selCobroType = null;
+  selSocioId = null;
   document.querySelectorAll('.dcbtn').forEach(b => b.className = 'dcbtn');
   document.querySelectorAll('.dpbtn').forEach(b => b.className = 'dpbtn');
-  // Restaurar visibilidad del bloque de pago (puede estar oculto si la última fue Nave Billetera)
+  // Restaurar visibilidad del bloque de pago (puede estar oculto si la última fue Nave Billetera/Socios)
   const pagoSection = document.querySelector('.d-pago');
   if (pagoSection) pagoSection.style.display = '';
+  if ($('co-efec')) { $('co-efec').style.opacity = ''; $('co-efec').style.pointerEvents = ''; }
+  if ($('co-trans')) { $('co-trans').style.opacity = ''; $('co-trans').style.pointerEvents = ''; }
+  if ($('d-socio-pick')) $('d-socio-pick').style.display = 'none';
+  if ($('d-marco-tipo')) $('d-marco-tipo').style.display = 'none';
 
   loadDriverTrips();
   // Si el bottom sheet "HOY" está abierto, refrescar también el card de
@@ -3556,12 +3715,13 @@ function getTripUsd(trip, field) {
 // donde todo entraba a caja al instante).
 function getTripPayments(trip) {
   if (Array.isArray(trip.payments) && trip.payments.length) return trip.payments;
-  // Carreras de crédito (Marco crédito, Lorenzo) o pendientes de cobro:
-  // NO tienen payment real. El monto se acumula como deuda del canal.
-  // Por eso devolvemos []: estas carreras no cuentan en el pendiente de
-  // entrega del chofer (no tiene plata en mano por ellas).
+  // Carreras de crédito (Marco crédito, Lorenzo, Socios) o pendientes de
+  // cobro: NO tienen payment real. El monto se acumula como deuda del
+  // canal o del socio. Por eso devolvemos []: estas carreras no cuentan
+  // en el pendiente de entrega del chofer (no tiene plata en mano por ellas).
   if (trip.is_credito || trip.payment_status === 'pending') return [];
-  if (trip.source === 'wapp') return []; // Lorenzo siempre es crédito
+  if (trip.source === 'wapp')   return []; // Lorenzo siempre es crédito
+  if (trip.source === 'socios') return []; // Socios siempre es crédito al fondo
   // Sintetizar para carreras viejas (registradas antes del Lote 11). Por
   // defecto las dejamos como PENDIENTES de entrega/verificación: nada
   // entra a caja hasta que admin haga click en "Recibí entrega completa".
@@ -3682,14 +3842,15 @@ async function loadResumen() {
   }
 
   // ─── Total consolidado USD (cards superiores) ───
-  // Excluye carreras a crédito (Marco crédito + Lorenzo): el bruto de
-  // esas carreras no es ingreso de la empresa, sino deuda con el canal.
-  // La comisión que sí cobramos por crédito se tracking aparte en Caja
-  // (creditoCons + comisionAcum). Carreras 'pendiente de cobro' tampoco
-  // suman al consolidado hasta que se cobren.
+  // Excluye carreras a crédito (Marco crédito + Lorenzo + Socios): el
+  // bruto de esas carreras no es ingreso de la empresa, sino deuda del
+  // canal o socio. La comisión que sí cobramos por crédito se trackea
+  // aparte en Caja (creditoCons + comisionAcum / socios saldo). Carreras
+  // 'pendiente de cobro' tampoco suman al consolidado hasta que se cobren.
   const tripsFacturados = trips.filter(t =>
     !(t.source === 'cinco' && t.is_credito) &&
     t.source !== 'wapp' &&
+    t.source !== 'socios' &&
     t.payment_status !== 'pending'
   );
   const brutoUsd = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
@@ -3806,9 +3967,9 @@ async function loadResumen() {
 // TRIP HTML
 // ════════════════════════════════════════
 function tripHTML(r, showDel) {
-  // Cobro tag: ocultar para carreras a crédito (Marco crédito y Lorenzo)
+  // Cobro tag: ocultar para carreras a crédito (Marco crédito, Lorenzo, Socios)
   // y para carreras pendientes de cobro (todavía no se cobró nada).
-  const isCreditTrip = r.is_credito || r.source === 'wapp';
+  const isCreditTrip = r.is_credito || r.source === 'wapp' || r.source === 'socios';
   const isPendingTrip = r.payment_status === 'pending';
   const cobroTag = isCreditTrip
     ? '<span class="badge" style="font-size:9px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D">💳 crédito</span>'
@@ -3843,7 +4004,7 @@ function tripHTML(r, showDel) {
   return `<div class="trip-item">
     <div class="ti-left">
       <div class="ti-row1">
-        <span class="badge ${BDGE[r.source]}">${SRC[r.source]}</span>
+        <span class="badge ${BDGE[r.source]}">${SRC[r.source]}${r.source==='socios' && r.socio ? ' · ' + (SOCIOS_LIST.find(s=>s.id===r.socio)?.name || r.socio) : ''}</span>
         ${cobroTag}
         <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
         ${syncTag}
@@ -4906,6 +5067,184 @@ async function renderCajaAdriana(allTrips) {
 }
 
 // ════════════════════════════════════════
+// SOCIOS — saldo bidireccional + cobros
+// ════════════════════════════════════════
+async function fetchPagosSocio() {
+  if (!fbRef || !isOnline) return [];
+  try {
+    const snap = await fbRef.ref('pagos_socio').once('value');
+    const v = snap.val() || {};
+    return Object.values(v).filter(p => p && typeof p === 'object');
+  } catch(e) { return []; }
+}
+
+// Renderiza la sección "Socios" en la pestaña Caja
+async function renderCajaSocios(allTrips) {
+  const el = $('caja-socios');
+  if (!el) return;
+  const pagos = await fetchPagosSocio();
+  const fmt = n => Math.round(n).toLocaleString('es');
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+
+  el.innerHTML = SOCIOS_LIST.map(socio => {
+    // Carreras de este socio (todas las facturadas, sin importar el estado de pago)
+    const carreras = (allTrips || []).filter(t =>
+      t && t.source === 'socios' && t.socio === socio.id && t.payment_status !== 'pending'
+    );
+    // Pagos del socio (USD canónico)
+    const pagosSocio = pagos.filter(p => p && p.socio === socio.id);
+    // Suma del bruto de carreras (deuda inicial del socio en USD)
+    const debeUsd = carreras.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
+    // Suma de pagos del socio en USD
+    const pagadoUsd = pagosSocio.reduce((s,p) => {
+      if (typeof p.amount_usd === 'number') return s + p.amount_usd;
+      if ((p.currency||'CUP').toUpperCase() === 'USD') return s + (p.amount || 0);
+      if (fxCache) {
+        const v = convertToUsd(p.amount || 0, p.currency || 'CUP');
+        if (v) return s + v.usd;
+      }
+      return s;
+    }, 0);
+    const saldoUsd = debeUsd - pagadoUsd;
+    // Color: positivo (te debe) = rojo claro, negativo (le debes) = verde claro, 0 = gris
+    const isCred = saldoUsd > 0.01;
+    const isDeb  = saldoUsd < -0.01;
+    const colorBg = isCred ? '#FEE2E2' : isDeb ? '#D1FAE5' : '#F3F4F6';
+    const colorTxt = isCred ? '#991B1B' : isDeb ? '#065F46' : '#374151';
+    const labelSaldo = isCred ? 'Te debe' : isDeb ? 'Le debes' : 'Saldo cero';
+    // Últimas carreras (5)
+    const carrerasRecent = [...carreras].sort((a,b) => ((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||''))).slice(0,5);
+    const carrerasLines = carrerasRecent.length ? carrerasRecent.map(t => {
+      const usd = getTripUsd(t, 'amount');
+      return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px dashed var(--brd);font-size:11px">
+        <span style="color:var(--txt2)">${t.date} · ${t.time||''} · ${t.driverName || '?'}</span>
+        <span style="color:var(--re);font-weight:500">+ ${fmt(t.amount)} ${t.currency||'CUP'}${usd ? ' ≈ ' + fmtUsd(usd) : ''}</span>
+      </div>`;
+    }).join('') : '';
+    // Últimos pagos (5)
+    const pagosRecent = [...pagosSocio].sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||'')).slice(0,5);
+    const pagosLines = pagosRecent.length ? pagosRecent.map(p => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px dashed var(--brd);font-size:11px">
+        <span style="color:var(--txt2)">${p.date} · ${p.cobro || 'efectivo'} · ${p.note || ''}</span>
+        <span style="color:var(--g);font-weight:500">− ${fmt(p.amount)} ${p.currency||'USD'}</span>
+        <button onclick="deletePagoSocio('${p.pago_id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:12px;padding:0 4px">✕</button>
+      </div>`).join('') : '';
+
+    return `
+      <div class="card" style="padding:12px;margin-bottom:8px;background:${colorBg};border-color:${colorTxt}33">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:${colorTxt}">${socio.name}</div>
+            <div style="font-size:10px;color:var(--txt3)">${carreras.length} carrera${carreras.length===1?'':'s'} · ${pagosSocio.length} pago${pagosSocio.length===1?'':'s'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px;color:var(--txt3)">${labelSaldo}</div>
+            <div style="font-size:20px;font-weight:700;color:${colorTxt}">${saldoUsd<0?'-':''}${fmtUsd(saldoUsd)}</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);margin-top:4px;padding-top:4px;border-top:1px dashed ${colorTxt}33">
+          <span>Acumulado: <strong>+${fmtUsd(debeUsd)}</strong></span>
+          <span>Cobrado: <strong style="color:var(--g)">−${fmtUsd(pagadoUsd)}</strong></span>
+        </div>
+        <button class="btn btnacc" style="margin-top:8px;width:100%;padding:7px;font-size:12px" onclick="openPagoSocioModal('${socio.id}')">+ Registrar cobro de ${socio.name}</button>
+        ${(carrerasLines || pagosLines) ? `
+          <div style="margin-top:8px">
+            ${carrerasLines ? `<div style="font-size:9px;color:var(--txt3);font-weight:600;text-transform:uppercase;margin-top:4px">Últimas carreras</div>${carrerasLines}` : ''}
+            ${pagosLines ? `<div style="font-size:9px;color:var(--txt3);font-weight:600;text-transform:uppercase;margin-top:6px">Últimos pagos</div>${pagosLines}` : ''}
+          </div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// Modal: registrar cobro de un socio
+function openPagoSocioModal(socioId) {
+  const socio = SOCIOS_LIST.find(s => s.id === socioId);
+  if (!socio) return;
+  const m = $('modal-pago-socio');
+  if (!m) return;
+  $('ps-socio').value = socioId;
+  $('ps-socio-name').textContent = socio.name;
+  $('ps-amount').value = '';
+  $('ps-currency').value = 'USD';
+  $('ps-cobro').value = 'efectivo';
+  $('ps-date').value = todayStr();
+  $('ps-note').value = '';
+  m.classList.add('show');
+  setTimeout(() => $('ps-amount')?.focus(), 100);
+}
+function closePagoSocioModal() { $('modal-pago-socio')?.classList.remove('show'); }
+
+async function savePagoSocio() {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const socioId = $('ps-socio').value;
+  const amt = parseFloat($('ps-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('ps-currency').value || 'USD';
+  const cobro = $('ps-cobro').value || 'efectivo';
+  const date = $('ps-date').value || todayStr();
+  const note = $('ps-note').value.trim();
+  // Convertir a USD canónico
+  const amtUsdObj = (currency === 'USD') ? { usd: amt, rate_used: 1, rate_date: '' } : convertToUsd(amt, currency);
+  const pago = {
+    pago_id: 'sps_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    socio: socioId,
+    amount: amt,
+    currency,
+    cobro,
+    amount_usd: amtUsdObj ? amtUsdObj.usd : null,
+    fx_rate_used: amtUsdObj ? amtUsdObj.rate_used : null,
+    fx_rate_date: amtUsdObj ? amtUsdObj.rate_date : '',
+    date,
+    paid_at: new Date().toISOString(),
+    paid_by: currentUser ? currentUser.id : 'admin',
+    note,
+  };
+  try {
+    await fbRef.ref(`pagos_socio/${pago.pago_id}`).set(pago);
+    // El cobro ENTRA A CAJA (es plata real recibida del socio)
+    const mov = {
+      id: 'mov_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+      tipo: 'ingreso',
+      categoria: 'cobro_socio',
+      amount: amt, currency, cobro,
+      amount_usd: pago.amount_usd, fx_rate_used: pago.fx_rate_used, fx_rate_date: pago.fx_rate_date,
+      date,
+      descripcion: `Cobro de ${SOCIOS_LIST.find(s=>s.id===socioId)?.name || socioId}${note ? ' · ' + note : ''}`,
+      created_at: new Date().toISOString(),
+      created_by: currentUser ? currentUser.id : 'admin',
+      from_pago_socio: pago.pago_id,
+    };
+    try { await fbRef.ref(`movimientos/${mov.id}`).set(mov); } catch(e) {}
+    toast('Cobro registrado ✓');
+    closePagoSocioModal();
+    loadCaja();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+async function deletePagoSocio(pagoId) {
+  if (!confirm('¿Eliminar este cobro? Se restaurará el saldo del socio.')) return;
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`pagos_socio/${pagoId}`).remove();
+    // Eliminar también el movimiento de caja asociado (si existe)
+    try {
+      const mSnap = await fbRef.ref('movimientos').once('value');
+      const movs = mSnap.val() || {};
+      for (const [mid, m] of Object.entries(movs)) {
+        if (m && m.from_pago_socio === pagoId) {
+          await fbRef.ref(`movimientos/${mid}`).remove();
+        }
+      }
+    } catch(e) {}
+    toast('Cobro eliminado');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+// ════════════════════════════════════════
 // GASTOS DEL CHOFER
 // ════════════════════════════════════════
 const GASTO_CATS = {
@@ -5002,6 +5341,9 @@ async function openEditTrip(tripId, date) {
     // El row de Marco crédito solo se muestra si canal=cinco
     const showMarcoCredito = (t.source === 'cinco');
     if ($('et-marco-credito-row')) $('et-marco-credito-row').style.display = showMarcoCredito ? 'flex' : 'none';
+    // El row de Socio solo se muestra si canal=socios
+    if ($('et-socio')) $('et-socio').value = t.socio || 'erick';
+    if ($('et-socio-row')) $('et-socio-row').style.display = (t.source === 'socios') ? 'block' : 'none';
 
     // Cargar pagos extras del trip a editar (todos los payments excepto el principal y la propina)
     // Para identificar el "principal" usamos: el primer payment que matchee amount+currency+cobro
@@ -5026,6 +5368,7 @@ async function openEditTrip(tripId, date) {
         const s = $('et-source').value;
         if ($('et-marco-credito-row')) $('et-marco-credito-row').style.display = (s === 'cinco') ? 'flex' : 'none';
         if (s !== 'cinco' && $('et-marco-credito')) $('et-marco-credito').checked = false;
+        if ($('et-socio-row')) $('et-socio-row').style.display = (s === 'socios') ? 'block' : 'none';
         applyEditFormState();
       };
     }
@@ -5066,7 +5409,8 @@ function applyEditFormState() {
   const marcoCred = !!$('et-marco-credito')?.checked && source === 'cinco';
   const isLorenzo = (source === 'wapp');
   const isAdriana = (source === 'adriana');
-  const isCredit = marcoCred || isLorenzo;
+  const isSocios  = (source === 'socios');
+  const isCredit  = marcoCred || isLorenzo || isSocios;
   const isPending = !!$('et-pending')?.checked;
 
   const cobroSel = $('et-cobro');
@@ -5194,11 +5538,13 @@ async function saveEditTrip() {
     });
   }
 
-  // Toggles: pendiente de cobro, Marco crédito, Lorenzo (siempre crédito)
+  // Toggles: pendiente de cobro, Marco crédito, Lorenzo, Socios
   const nowPending = !!$('et-pending')?.checked;
   const nowMarcoCredito = (source === 'cinco' && !!$('et-marco-credito')?.checked);
   const isLorenzo = (source === 'wapp');                      // Lorenzo siempre es crédito
-  const isCredit  = nowMarcoCredito || isLorenzo;
+  const isSocios  = (source === 'socios');                    // Socios: deuda con socio
+  const isCredit  = nowMarcoCredito || isLorenzo || isSocios;
+  const socioId   = isSocios ? ($('et-socio')?.value || 'erick') : null;
   const extras = Array.isArray(window._editExtraPayments) ? [...window._editExtraPayments] : [];
   const nowIso = new Date().toISOString();
 
@@ -5257,6 +5603,7 @@ async function saveEditTrip() {
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
     payment_status,
     is_credito: isCredit,
+    socio: socioId,
     payments,
     modification_history: modHistory
   };
@@ -5782,6 +6129,7 @@ async function loadCaja() {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return;
     if (t.source === 'wapp') return;
+    if (t.source === 'socios') return; // Socios: deuda independiente, no toca caja
     if (t.payment_status === 'pending') return;
     const pays = getTripPayments(t);
     pays.forEach((p, idx) => {
@@ -6102,6 +6450,9 @@ async function loadCaja() {
   // ─── Fondo Adriana (anticipos − consumos) ───
   // Pasamos TODAS las trips (no filtradas por rango) para mostrar el saldo total
   renderCajaAdriana(allTrips);
+
+  // ─── Socios (Erick / Antonio / Adriana) — saldo por cada uno ───
+  renderCajaSocios(allTrips);
 
   // ─── Libro de operaciones (todas las entradas y salidas) ───
   // Junta trips + pagos + pagosCanal + movs en una sola lista cronológica.
