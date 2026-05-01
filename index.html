@@ -3655,31 +3655,14 @@ async function loadResumen() {
   const dates = range.dates;
   if ($('a-period-label')) $('a-period-label').textContent = range.label;
 
-  // Cargar trips de TODAS las fechas del rango: primero IDB, luego completar
-  // con PB para no perder nada. Trips locales sin sincronizar disparan un
-  // syncPending en background.
+  // Cargar trips de TODAS las fechas del rango. PB es fuente de verdad —
+  // reconcileTripsForDate() limpia locales borrados y refresca editados.
   let trips = [];
   for (const d of dates) {
-    try { trips = trips.concat(await dbGetTripsByDate(d)); } catch(e) {}
+    try { trips = trips.concat(await reconcileTripsForDate(d)); } catch(e) {}
   }
   if (fbRef && isOnline && trips.some(t => t.synced === 0)) {
     syncPending().catch(() => {});
-  }
-
-  if (fbRef && isOnline) {
-    const localIds = new Set(trips.map(t => t.id));
-    const fbReads = await Promise.all(dates.map(d =>
-      fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({}))
-    ));
-    for (const day of fbReads) {
-      for (const ft of Object.values(day)) {
-        if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
-          try { await dbSaveTrip({ ...ft, synced: 1 }); } catch(e) {}
-          trips.push(ft);
-          localIds.add(ft.id);
-        }
-      }
-    }
   }
 
   // ─── Total consolidado USD (cards superiores) ───
