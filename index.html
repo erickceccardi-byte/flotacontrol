@@ -1262,7 +1262,10 @@ audio{width:100%;height:36px;margin-top:6px}
     <div class="bsheet-grip" onclick="closeHoySheet()"></div>
     <div class="bsheet-head">
       <span class="bsheet-ttl">Mis carreras <span id="sheet-date" style="color:var(--txt3);font-weight:400;font-size:12px"></span></span>
-      <button class="bsheet-x" onclick="closeHoySheet()">✕</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="bsheet-x" onclick="refreshDriverData()" title="Actualizar" style="font-size:16px">⟳</button>
+        <button class="bsheet-x" onclick="closeHoySheet()">✕</button>
+      </div>
     </div>
     <div class="bsheet-summary">
       <div class="bs-cell"><div class="bs-val g" id="drv-neto">—</div><div class="bs-lbl">Neto</div></div>
@@ -1631,6 +1634,59 @@ async function dbGetUnsynced() {
   });
 }
 
+// ── Reconciliar trips locales con servidor (PocketBase es fuente de verdad) ──
+// Cuando el admin edita o borra una carrera, el cambio queda en PB. La PWA
+// del chofer tiene una copia local en IndexedDB que puede quedar
+// desactualizada. Esta función:
+//   - Reemplaza en IDB las trips que existen en PB (server-authoritative)
+//   - Borra de IDB las trips que estaban sincronizadas pero ya no están en PB
+//     (admin las eliminó remotamente)
+//   - Preserva las trips locales con synced=0 (todavía no se subieron)
+// Devuelve la lista final de trips para esa fecha, ya reconciliada.
+async function reconcileTripsForDate(date) {
+  let local = [];
+  try { local = await dbGetTripsByDate(date); } catch(e) { local = []; }
+  if (!fbRef || !isOnline) return local;
+  let serverObj = null;
+  try {
+    const snap = await fbRef.ref('trips/' + date).once('value');
+    serverObj = snap.val();
+  } catch(e) {
+    // Sin conexión efectiva — devolver lo local
+    return local;
+  }
+  const serverTrips = serverObj ? Object.values(serverObj).filter(x => x && typeof x === 'object') : [];
+  const serverIds = new Set(serverTrips.map(t => t.id || t.trip_id).filter(Boolean));
+  const localById = new Map(local.map(t => [t.id, t]));
+
+  // 1) Trips locales sincronizadas que ya no están en PB → borrarlas
+  for (const lt of local) {
+    if (lt.synced === 1 && !serverIds.has(lt.id)) {
+      try { await dbDeleteTrip(lt.id); } catch(e) {}
+      localById.delete(lt.id);
+    }
+  }
+
+  // 2) Trips de PB → upsert en IDB (siempre tomamos la versión del servidor,
+  //    excepto si la versión local está sin sincronizar (tiene cambios pendientes))
+  for (const st of serverTrips) {
+    const sid = st.id || st.trip_id;
+    if (!sid) continue;
+    const lt = localById.get(sid);
+    if (lt && lt.synced === 0) continue; // Cambios locales pendientes, no pisar
+    // Preservar audio local si PB lo tiene placeholder (audio > 500KB no se sube)
+    let merged = { ...st, id: sid, synced: 1 };
+    if (lt && lt.audioB64 && lt.audioB64 !== '[audio-local-only]'
+        && (!st.audioB64 || st.audioB64 === '[audio-local-only]')) {
+      merged.audioB64 = lt.audioB64;
+    }
+    try { await dbSaveTrip(merged); } catch(e) {}
+    localById.set(sid, merged);
+  }
+
+  return Array.from(localById.values());
+}
+
 // ════════════════════════════════════════
 // POCKETBASE SYNC (reemplazo a Firebase, mismo API: fbRef.ref(path).X())
 // ════════════════════════════════════════
@@ -1939,6 +1995,7 @@ function doLogout() {
   currentUser = null;
   selCan = null; selCobroType = null; currentAudioB64 = null;
   stopRecIfActive();
+  stopDriverAutoRefresh();
   $('li-user').value = '';
   $('li-pass').value = '';
   $('li-err').textContent = '';
@@ -2241,6 +2298,35 @@ function showDriverScreen() {
   if (!fxCache && fbRef && isOnline) {
     loadLatestFxRates().then(() => { refreshFxWarn(); loadDriverTrips(); });
   }
+  // Auto-refresh cada 45s mientras el chofer está logueado: si admin
+  // borra/edita una carrera, en menos de 1 min el chofer ve el cambio
+  // sin tener que recargar la app a mano.
+  startDriverAutoRefresh();
+}
+
+// ── Auto-refresh para chofer ──
+// Mantiene la lista del chofer sincronizada con PB cada 45s (los cambios
+// del admin: borrar carrera, editar status, marcar entrega, llegan en
+// menos de 1 minuto sin tener que cerrar y abrir la app).
+let _driverAutoTimer = null;
+function startDriverAutoRefresh() {
+  stopDriverAutoRefresh();
+  _driverAutoTimer = setInterval(() => {
+    if (!currentUser || currentUser.role !== 'driver') {
+      stopDriverAutoRefresh();
+      return;
+    }
+    if (!isOnline) return;
+    // Si está editando una carrera, no refrescar (no romper el modal)
+    if ($('modal-edit-trip') && $('modal-edit-trip').classList.contains('show')) return;
+    loadDriverTrips();
+    if ($('sheet-hoy') && $('sheet-hoy').classList.contains('show')) {
+      loadDriverPendingAcumulado();
+    }
+  }, 45000);
+}
+function stopDriverAutoRefresh() {
+  if (_driverAutoTimer) { clearInterval(_driverAutoTimer); _driverAutoTimer = null; }
 }
 
 function showATab(name, el) {
@@ -3191,6 +3277,11 @@ async function regTrip() {
   if (pagoSection) pagoSection.style.display = '';
 
   loadDriverTrips();
+  // Si el bottom sheet "HOY" está abierto, refrescar también el card de
+  // pendiente de entrega (si no, la próxima vez que lo abra se carga).
+  if ($('sheet-hoy') && $('sheet-hoy').classList.contains('show')) {
+    loadDriverPendingAcumulado();
+  }
 }
 
 async function loadDriverTrips() {
@@ -3198,35 +3289,30 @@ async function loadDriverTrips() {
   // del día calendario actual). Los totales se calculan sobre las
   // PENDIENTES DE ENTREGA — eso es lo que le importa al chofer ver
   // (cuánto debe acumulado hasta la próxima entrega al admin).
+  //
+  // IMPORTANTE: el servidor (PocketBase) es la fuente de verdad. Si el
+  // admin borra o edita una carrera, reconcileTripsForDate() actualiza la
+  // copia local del chofer (borra las que ya no existen, refresca payments
+  // que cambiaron de status, etc.). Carreras locales con synced=0 (sin
+  // subir todavía) se preservan.
   const todayD = new Date(); todayD.setHours(0,0,0,0);
   let all7 = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(todayD); d.setDate(d.getDate() - i);
     const ds = ymdLocal(d);
-    try { all7 = all7.concat(await dbGetTripsByDate(ds)); } catch(e) {}
-  }
-  if (fbRef && isOnline) {
-    const localIds = new Set(all7.map(t => t.id));
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(todayD); d.setDate(d.getDate() - i);
-      const ds = ymdLocal(d);
-      try {
-        const snap = await fbRef.ref('trips/' + ds).once('value');
-        for (const ft of Object.values(snap.val() || {})) {
-          if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
-            all7.push(ft);
-            localIds.add(ft.id);
-          }
-        }
-      } catch(e) {}
-    }
+    try { all7 = all7.concat(await reconcileTripsForDate(ds)); } catch(e) {}
   }
   const myAll = all7.filter(r => r && r.driverId === currentUser.id);
-  // "mine" = pendientes de entrega (lo que importa para los totales)
+  // "mine" = pendientes de entrega (lo que importa para los totales).
+  // Mismas exclusiones que loadDriverPendingAcumulado: créditos canal,
+  // Lorenzo, Adriana y Nave Billetera no van al pendiente del chofer.
   const mine = myAll.filter(r => {
-    if (r.payment_status === 'pending') return false; // sin cobrar todavía
+    if (r.payment_status === 'pending') return false;
+    if (r.is_credito) return false;
+    if (r.source === 'wapp') return false;
+    if (r.source === 'adriana') return false;
+    if (r.source === 'nave_billetera' || r.cobro === 'billetera') return false;
     const pays = getTripPayments(r);
-    // Pendiente: tiene al menos un payment con status 'pending_handover' o 'pending_verification'
     return pays.some(p => p && (p.status === 'pending_handover' || p.status === 'pending_verification'));
   }).sort((a,b) => ((b.date||'') + ' ' + (b.time||'')).localeCompare((a.date||'') + ' ' + (a.time||'')));
 
@@ -3327,7 +3413,7 @@ async function loadDriverTrips() {
   }
 
   // Header meta (chofer + vehículo + contadores)
-  updateDriverMeta(mine.length, neto);
+  updateDriverMeta(mine.length, netoToShow);
 }
 
 function updateDriverMeta(carrCount, netoTotal) {
@@ -3454,6 +3540,12 @@ function getTripUsd(trip, field) {
 // donde todo entraba a caja al instante).
 function getTripPayments(trip) {
   if (Array.isArray(trip.payments) && trip.payments.length) return trip.payments;
+  // Carreras de crédito (Marco crédito, Lorenzo) o pendientes de cobro:
+  // NO tienen payment real. El monto se acumula como deuda del canal.
+  // Por eso devolvemos []: estas carreras no cuentan en el pendiente de
+  // entrega del chofer (no tiene plata en mano por ellas).
+  if (trip.is_credito || trip.payment_status === 'pending') return [];
+  if (trip.source === 'wapp') return []; // Lorenzo siempre es crédito
   // Sintetizar para carreras viejas (registradas antes del Lote 11). Por
   // defecto las dejamos como PENDIENTES de entrega/verificación: nada
   // entra a caja hasta que admin haga click en "Recibí entrega completa".
@@ -4513,6 +4605,21 @@ function openHoySheet() {
   $('sheet-hoy').classList.add('show');
 }
 
+// Botón "⟳" del bottom sheet — fuerza una sincronización inmediata con
+// el servidor (útil cuando el admin acaba de borrar/editar una carrera y
+// el chofer no quiere esperar el auto-refresh de 45s).
+async function refreshDriverData() {
+  if (!isOnline) { toast('Sin conexión'); return; }
+  toast('Sincronizando…');
+  try {
+    await loadDriverTrips();
+    await loadDriverPendingAcumulado();
+    toast('✓ Actualizado');
+  } catch(e) {
+    toast('Error al sincronizar');
+  }
+}
+
 // ── Cargar y mostrar acumulado pendiente del chofer (últimos 60 días) ──
 async function loadDriverPendingAcumulado() {
   const card = $('drv-pending-card');
@@ -4521,37 +4628,33 @@ async function loadDriverPendingAcumulado() {
   if (!card || !listEl || !currentUser || currentUser.role !== 'driver') return;
   try {
     let trips = [];
-    // Últimos 60 días: leemos IDB primero, luego completar con PB
+    // Últimos 60 días — reconciliar con PB para que las eliminaciones y
+    // cambios de status del admin se reflejen acá. La función
+    // reconcileTripsForDate() ya combina IDB + PB y limpia las trips que
+    // el admin borró remotamente.
     const today = new Date(); today.setHours(0,0,0,0);
     for (let i = 0; i < 60; i++) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = ymdLocal(d);
-      try { trips = trips.concat(await dbGetTripsByDate(ds)); } catch(e) {}
+      try { trips = trips.concat(await reconcileTripsForDate(ds)); } catch(e) {}
     }
-    if (fbRef && isOnline) {
-      const localIds = new Set(trips.map(t => t.id));
-      for (let i = 0; i < 60; i++) {
-        const d = new Date(today); d.setDate(d.getDate() - i);
-        const ds = ymdLocal(d);
-        try {
-          const snap = await fbRef.ref('trips/' + ds).once('value');
-          const v = snap.val() || {};
-          for (const ft of Object.values(v)) {
-            if (ft && typeof ft === 'object' && !localIds.has(ft.id)) {
-              trips.push(ft);
-              localIds.add(ft.id);
-            }
-          }
-        } catch(e) {}
-      }
-    }
-    // Filtrar carreras del chofer actual y sumar payments pendientes
+    // Filtrar carreras del chofer actual y sumar payments pendientes.
+    // Exclusiones del pendiente del chofer:
+    //   - payment_status='pending' (carrera sin cobrar todavía)
+    //   - is_credito (Marco crédito y Lorenzo): no recibe plata, solo deuda canal
+    //   - source='wapp' (Lorenzo): siempre crédito
+    //   - source='adriana': prepago — Adriana ya transfirió al admin
+    //   - source='nave_billetera' / cobro='billetera': pago directo al canal
     const mine = trips.filter(t => t.driverId === currentUser.id);
     const byCur = {}; // {currency: {efectivo: 0, transferencia: 0}}
     let totalUsd = 0;
     let count = 0;
     mine.forEach(t => {
-      if (t.payment_status === 'pending') return; // carreras sin cobrar todavía no cuentan acá
+      if (t.payment_status === 'pending') return;
+      if (t.is_credito) return;
+      if (t.source === 'wapp') return;
+      if (t.source === 'adriana') return;
+      if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
       const pays = getTripPayments(t);
       pays.forEach(p => {
         if (!p || !p.amount) return;
@@ -5068,10 +5171,19 @@ async function saveEditTrip() {
     toast('Carrera actualizada ✓');
     closeEditTrip();
     // Refrescar la vista activa
-    if ($('atp-resumen')?.classList.contains('active')) loadResumen();
-    else if ($('atp-detalle')?.classList.contains('active')) loadDetalle();
-    else if ($('atp-pendientes')?.classList.contains('active')) loadPendientes();
-    else if ($('atp-historial')?.classList.contains('active')) loadHistorial();
+    if (currentUser && currentUser.role === 'driver') {
+      // Chofer: refrescar listado y card de pendiente (la edición pudo
+      // cambiar el monto, currency, etc. — la vista local debe coincidir).
+      await loadDriverTrips();
+      if ($('sheet-hoy') && $('sheet-hoy').classList.contains('show')) {
+        await loadDriverPendingAcumulado();
+      }
+    } else {
+      if ($('atp-resumen')?.classList.contains('active')) loadResumen();
+      else if ($('atp-detalle')?.classList.contains('active')) loadDetalle();
+      else if ($('atp-pendientes')?.classList.contains('active')) loadPendientes();
+      else if ($('atp-historial')?.classList.contains('active')) loadHistorial();
+    }
   } catch(e) {
     toast('Error: ' + e.message);
   }
