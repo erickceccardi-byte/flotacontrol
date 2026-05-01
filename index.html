@@ -5727,47 +5727,57 @@ async function loadCaja() {
     matriz[c].transferencia = saldo[c].transferencia || 0;
   });
 
-  // 2) Ingresos por carrera. Modelo nuevo:
+  // 2) Ingresos por carrera. Modelo:
   //    Cada trip tiene trip.payments[] con varios pagos (amount, currency,
-  //    cobro, status). Solo entran a caja los que YA están con el admin:
-  //      - efectivo: status='handed_over' (chofer ya entregó el dinero)
-  //      - transferencia: cualquier status que no sea pending_verification
-  //    Los pendientes se acumulan aparte (driverPending / pendingTransfers).
-  //    Compatibilidad: getTripPayments() sintetiza un payment de
-  //    amount/currency/cobro para trips viejas, marcándolas como
-  //    'handed_over' o 'verified' (entran a caja como antes).
-  //    EXCEPCIÓN: 'nave_billetera' / cobro='billetera' — no afecta caja.
-  const driverPending = {};   // {driverId: {currency: {efectivo: amount, transferencia: amount}}}
-  const pendingTransfers = []; // [{trip_id, driverId, driverName, amount, currency, date, time, payment_index}]
+  //    cobro, status). Toda plata cobrada para la empresa suma al matrix —
+  //    incluso si el chofer todavía la tiene (pending_handover). La empresa
+  //    es dueña de esa plata aunque físicamente esté con el chofer; el
+  //    card "Pendiente de entrega" muestra qué le toca cobrar a cada chofer.
+  //
+  //    Estados que SUMAN al matrix:
+  //      - handed_over     (efectivo entregado al admin)
+  //      - verified        (transferencia verificada)
+  //      - pending_handover (efectivo todavía con el chofer — sigue siendo de la empresa)
+  //      - pending_verification (transferencia recibida, falta confirmar)
+  //
+  //    Estados que NO suman:
+  //      - billetera       (Nave Billetera: pago directo al canal)
+  //
+  //    Exclusiones por trip:
+  //      - source='nave_billetera' / cobro='billetera'
+  //      - source='cinco' + is_credito (Marco crédito: deuda de canal)
+  //      - source='wapp'   (Lorenzo siempre crédito)
+  //      - payment_status='pending' (carrera sin cobrar todavía)
+  const driverPending = {};   // {driverId: {currency: {efectivo, transferencia}}} — informativo
+  const pendingTransfers = []; // transferencias por verificar
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
-    if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
-    if (t.source === 'wapp') return; // Lorenzo siempre crédito: no afecta caja
-    if (t.payment_status === 'pending') return; // carrera todavía no cobrada → no afecta caja
+    if (t.source === 'cinco' && t.is_credito) return;
+    if (t.source === 'wapp') return;
+    if (t.payment_status === 'pending') return;
     const pays = getTripPayments(t);
     pays.forEach((p, idx) => {
       if (!p || !p.amount) return;
       if (p.status === 'billetera') return;
-      if (p.status === 'handed_over' || p.status === 'verified') {
-        // Ya está en caja (efectivo entregado o transferencia verificada/legacy)
+      // Sumar al matrix (la empresa ya es dueña del dinero, esté donde esté)
+      if (p.status === 'handed_over' || p.status === 'verified'
+          || p.status === 'pending_handover' || p.status === 'pending_verification') {
         aplicarATraza(matriz, p.currency, p.cobro, p.amount);
-      } else if (p.status === 'pending_handover') {
-        // Efectivo aún en manos del chofer
+      }
+      // Trackear qué efectivo está aún con el chofer (informativo)
+      if (p.status === 'pending_handover') {
         const drv = t.driverId || '?';
         if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {}, notes: [] };
         const cur = (p.currency || 'CUP').toUpperCase();
         if (!driverPending[drv].byCur[cur]) driverPending[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
         driverPending[drv].byCur[cur][p.cobro || 'efectivo'] += p.amount;
-        // Recopilar notas admin de las carreras pendientes (para mostrar al cobrar)
         if (t.admin_note && idx === 0) driverPending[drv].notes.push({
           date: t.date, time: t.time||'', text: t.admin_note,
           source: t.source, amount: t.amount, currency: t.currency
         });
-      } else if (p.status === 'pending_verification') {
-        // Transferencia recibida pero no verificada — sí entra a caja
-        // (porque ya está en la cuenta) pero también queda en lista para que
-        // el admin marque verificada cuando confirme.
-        aplicarATraza(matriz, p.currency, p.cobro, p.amount);
+      }
+      // Trackear transferencias por verificar (admin confirma con extracto del banco)
+      if (p.status === 'pending_verification') {
         pendingTransfers.push({
           trip_id: t.trip_id || t.id, driverId: t.driverId, driverName: t.driverName,
           source: t.source,
