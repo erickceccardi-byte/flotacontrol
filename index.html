@@ -2630,14 +2630,24 @@ async function loadDetalle() {
   // Filtrar por chofer y por la ventana del periodo
   const trips = allTrips.filter(t => t.driverId === driverId && range.filter(t));
 
-  // Header con info
+  // Header con info (cuenta TODAS las carreras, incluyendo crédito)
   $('det-info').textContent = `${drv.name} · ${range.label} · ${trips.length} carrera${trips.length===1?'':'s'}`;
 
-  // Total consolidado USD (usando getTripUsd que prioriza congelado)
-  const brutoUsd = trips.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
-  const comUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
-  const netoUsd  = trips.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
-  const tipUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'tipAmount'), 0);
+  // Total consolidado USD: excluye carreras de crédito (Marco crédito y
+  // Lorenzo) y carreras sin cobrar todavía. Esos montos no son ingreso
+  // disponible — el bruto del crédito es deuda del canal hacia la empresa,
+  // y la comisión que sí cobramos por crédito se acumula en Caja
+  // (creditoCons + comisionAcum). El salario y bono del chofer se calculan
+  // sobre este neto "real" (lo cobrado, no lo prometido).
+  const tripsFacturados = trips.filter(t =>
+    !(t.source === 'cinco' && t.is_credito) &&
+    t.source !== 'wapp' &&
+    t.payment_status !== 'pending'
+  );
+  const brutoUsd = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
+  const comUsd   = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
+  const netoUsd  = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  const tipUsd   = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'tipAmount'), 0);
   const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
   $('det-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
   $('det-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
@@ -2760,10 +2770,16 @@ async function loadDetalle() {
       results.forEach(day => Object.values(day).forEach(t => { if (t && typeof t === 'object' && t.driverId === driverId) trips90.push(t); }));
     } catch(e) {}
   }
-  // Bono trimestral: NO se calcula sobre carreras del canal Adriana
-  // (esas son pagos anticipados, ya pagadas a la empresa, no generan bono).
+  // Bono trimestral: excluye Adriana (prepago, ya cobrado) y carreras a
+  // crédito (Marco crédito + Lorenzo, todavía no cobradas — solo cuentan
+  // cuando el canal paga su deuda). Pendientes de cobro tampoco aplican.
   const netoBase90 = trips90
-    .filter(t => t && t.source !== 'adriana')
+    .filter(t => t
+      && t.source !== 'adriana'
+      && !(t.source === 'cinco' && t.is_credito)
+      && t.source !== 'wapp'
+      && t.payment_status !== 'pending'
+    )
     .reduce((s, t) => s + getTripUsd(t, 'netAmount'), 0);
   const bonoCalcUsd = netoBase90 * (bonusPct / 100);
   const bonoCalcCup = (cupRate && bonoCalcUsd) ? Math.round(bonoCalcUsd * cupRate) : null;
@@ -3666,14 +3682,24 @@ async function loadResumen() {
   }
 
   // ─── Total consolidado USD (cards superiores) ───
-  const brutoUsd = trips.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
-  const comUsd   = trips.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
-  const netoUsd  = trips.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  // Excluye carreras a crédito (Marco crédito + Lorenzo): el bruto de
+  // esas carreras no es ingreso de la empresa, sino deuda con el canal.
+  // La comisión que sí cobramos por crédito se tracking aparte en Caja
+  // (creditoCons + comisionAcum). Carreras 'pendiente de cobro' tampoco
+  // suman al consolidado hasta que se cobren.
+  const tripsFacturados = trips.filter(t =>
+    !(t.source === 'cinco' && t.is_credito) &&
+    t.source !== 'wapp' &&
+    t.payment_status !== 'pending'
+  );
+  const brutoUsd = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
+  const comUsd   = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'commAmount'), 0);
+  const netoUsd  = tripsFacturados.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
   const fmtUsd = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
   $('a-neto').textContent  = netoUsd  ? fmtUsd(netoUsd)  : '—';
   $('a-com').textContent   = comUsd   ? '-' + fmtUsd(comUsd) : '—';
   $('a-bruto').textContent = brutoUsd ? fmtUsd(brutoUsd) : '—';
-  $('a-carr').textContent  = trips.length || '—';
+  $('a-carr').textContent  = tripsFacturados.length || '—';
 
   // Nota de tasa de cambio usada
   const fxNote = $('a-fx-note');
@@ -3687,8 +3713,9 @@ async function loadResumen() {
   }
 
   // ─── Desglose por moneda × forma de pago ───
+  // Mismo filtro que el consolidado: sin créditos ni pendientes de cobro.
   const breakdown = {};
-  trips.forEach(t => {
+  tripsFacturados.forEach(t => {
     const cur = (t.currency || 'CUP').toUpperCase();
     const cob = t.cobro || 'desconocido';
     if (!breakdown[cur]) breakdown[cur] = { efectivo: 0, transferencia: 0, otro: 0 };
@@ -3717,11 +3744,12 @@ async function loadResumen() {
   }
 
   // ─── Por chofer (USD consolidado + desglose en su moneda original) ───
+  // También excluye créditos y pendientes (mismos números que cards superiores).
   const byD = {};
   getDrivers().filter(d => d.id !== 'd004').forEach((d,i) => {
     byD[d.id] = { name:d.name, idx:i, c:0, brutoUsd:0, netoUsd:0, comUsd:0, byCur:{} };
   });
-  trips.forEach(r => {
+  tripsFacturados.forEach(r => {
     if (!byD[r.driverId]) byD[r.driverId] = { name: r.driverName, idx: Object.keys(byD).length, c:0, brutoUsd:0, netoUsd:0, comUsd:0, tipUsd:0, byCur:{} };
     const drv = byD[r.driverId];
     drv.c++;
