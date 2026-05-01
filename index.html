@@ -3778,7 +3778,15 @@ async function loadResumen() {
 // TRIP HTML
 // ════════════════════════════════════════
 function tripHTML(r, showDel) {
-  const cobroTag = r.cobro === 'efectivo'
+  // Cobro tag: ocultar para carreras a crédito (Marco crédito y Lorenzo)
+  // y para carreras pendientes de cobro (todavía no se cobró nada).
+  const isCreditTrip = r.is_credito || r.source === 'wapp';
+  const isPendingTrip = r.payment_status === 'pending';
+  const cobroTag = isCreditTrip
+    ? '<span class="badge" style="font-size:9px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D">💳 crédito</span>'
+    : isPendingTrip
+    ? '<span class="badge" style="font-size:9px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5">⏳ pendiente cobro</span>'
+    : r.cobro === 'efectivo'
     ? '<span class="cobro-tag ct-efec">💵 Efectivo</span>'
     : r.cobro === 'transferencia'
     ? '<span class="cobro-tag ct-trans">📲 Transferencia</span>'
@@ -4982,14 +4990,22 @@ async function openEditTrip(tripId, date) {
     }
     renderEditExtraPayments();
 
-    // Listener: si cambia el source (canal), mostrar/ocultar Marco crédito
+    // Listeners: si cambia el canal, Marco crédito o pendiente, recalcular
+    // qué campos deben quedar deshabilitados (cobro/currency no aplican
+    // cuando la carrera es crédito o pendiente).
     if ($('et-source')) {
       $('et-source').onchange = () => {
         const s = $('et-source').value;
         if ($('et-marco-credito-row')) $('et-marco-credito-row').style.display = (s === 'cinco') ? 'flex' : 'none';
         if (s !== 'cinco' && $('et-marco-credito')) $('et-marco-credito').checked = false;
+        applyEditFormState();
       };
     }
+    if ($('et-marco-credito')) $('et-marco-credito').onchange = applyEditFormState;
+    if ($('et-pending'))       $('et-pending').onchange       = applyEditFormState;
+
+    // Estado inicial
+    applyEditFormState();
 
     // El chofer NO puede cambiar la fecha (solo admin). Tampoco el chofer
     // puede reasignar la carrera a otro driver.
@@ -4999,6 +5015,78 @@ async function openEditTrip(tripId, date) {
     $('modal-edit-trip').classList.add('show');
   } catch(e) {
     toast('Error: ' + e.message);
+  }
+}
+
+// ── Estado del modal Editar carrera ──
+// Calcula qué campos deben quedar deshabilitados según el canal y los
+// toggles de crédito/pendiente. Reglas:
+//   - Marco crédito (source=cinco + checkbox) → cobro y "+ Otra moneda"
+//     no aplican (no hay cobro real, Marco cubre).
+//   - Lorenzo (source=wapp) → siempre crédito; mismo trato. Forzar
+//     currency=USD y cobro=transferencia (regla del canal).
+//   - Adriana (source=adriana) → currency=CUP, cobro=transferencia, ambos
+//     bloqueados (Adriana paga via transferencia CUP del fondo prepago).
+//   - Pendiente de cobro → cobro y currency siguen visibles porque al
+//     marcarse cobrada habrá que elegirlos, pero "+ Otra moneda" tampoco
+//     aplica todavía.
+//   - Nave Billetera → cobro=billetera (no efectivo/transferencia), pero
+//     no exponemos esa opción en el select del modal; lo dejamos como
+//     marker silencioso.
+function applyEditFormState() {
+  const source = $('et-source')?.value || 'directo';
+  const marcoCred = !!$('et-marco-credito')?.checked && source === 'cinco';
+  const isLorenzo = (source === 'wapp');
+  const isAdriana = (source === 'adriana');
+  const isCredit = marcoCred || isLorenzo;
+  const isPending = !!$('et-pending')?.checked;
+
+  const cobroSel = $('et-cobro');
+  const curSel   = $('et-currency');
+  const extraBtn = document.querySelector('#modal-edit-trip button[onclick*="openExtraPayModalEdit"]');
+
+  // Forzar valores específicos por canal
+  if (isLorenzo) {
+    if (curSel)   { curSel.value = 'USD'; }
+    if (cobroSel) { cobroSel.value = 'transferencia'; }
+  } else if (isAdriana) {
+    if (curSel)   { curSel.value = 'CUP'; }
+    if (cobroSel) { cobroSel.value = 'transferencia'; }
+  }
+
+  // Cobro: deshabilitar si es crédito (Marco crédito o Lorenzo) o si el
+  // canal Adriana lo fuerza. Pendiente NO deshabilita (al cobrar tendrá
+  // que elegirse).
+  if (cobroSel) {
+    const dis = isCredit || isAdriana;
+    cobroSel.disabled = dis;
+    cobroSel.style.opacity = dis ? '0.5' : '';
+    cobroSel.style.cursor  = dis ? 'not-allowed' : '';
+    cobroSel.title = isCredit ? 'No aplica: la carrera es a crédito (Marco/Lorenzo cubre)'
+                              : (isAdriana ? 'Adriana siempre es transferencia CUP' : '');
+  }
+  // Currency: deshabilitar para Lorenzo (USD) y Adriana (CUP). Marco
+  // crédito permite cualquier moneda (es solo el monto a contabilizar).
+  if (curSel) {
+    const dis = isLorenzo || isAdriana;
+    curSel.disabled = dis;
+    curSel.style.opacity = dis ? '0.5' : '';
+    curSel.style.cursor  = dis ? 'not-allowed' : '';
+  }
+  // "+ Otra moneda": no tiene sentido si la carrera es crédito o pendiente
+  if (extraBtn) {
+    const dis = isCredit || isPending || isAdriana;
+    extraBtn.disabled = dis;
+    extraBtn.style.opacity = dis ? '0.4' : '';
+    extraBtn.style.pointerEvents = dis ? 'none' : '';
+    extraBtn.title = isCredit ? 'No aplica para carreras a crédito' : (isPending ? 'Marca como cobrada primero' : '');
+  }
+  // Si es crédito o pendiente, limpiar extras (no aplican)
+  if (isCredit || isPending) {
+    if (Array.isArray(window._editExtraPayments) && window._editExtraPayments.length) {
+      window._editExtraPayments = [];
+      renderEditExtraPayments();
+    }
   }
 }
 
@@ -5078,9 +5166,11 @@ async function saveEditTrip() {
     });
   }
 
-  // Toggles: pendiente de cobro y Marco crédito
+  // Toggles: pendiente de cobro, Marco crédito, Lorenzo (siempre crédito)
   const nowPending = !!$('et-pending')?.checked;
   const nowMarcoCredito = (source === 'cinco' && !!$('et-marco-credito')?.checked);
+  const isLorenzo = (source === 'wapp');                      // Lorenzo siempre es crédito
+  const isCredit  = nowMarcoCredito || isLorenzo;
   const extras = Array.isArray(window._editExtraPayments) ? [...window._editExtraPayments] : [];
   const nowIso = new Date().toISOString();
 
@@ -5090,9 +5180,9 @@ async function saveEditTrip() {
   if (nowPending) {
     payment_status = 'pending';
     payments = [];
-  } else if (nowMarcoCredito) {
+  } else if (isCredit) {
     payment_status = 'paid';
-    payments = []; // Marco crédito = no hay cobro real
+    payments = []; // Crédito (Marco/Lorenzo) — no hay cobro real
   } else {
     // Construir payments: principal + extras
     payments = [{
@@ -5138,7 +5228,7 @@ async function saveEditTrip() {
     fx_rate_used: amtUsd ? amtUsd.rate_used : null,
     fx_rate_date: amtUsd ? amtUsd.rate_date : null,
     payment_status,
-    is_credito: nowMarcoCredito,
+    is_credito: isCredit,
     payments,
     modification_history: modHistory
   };
