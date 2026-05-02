@@ -6931,7 +6931,7 @@ function renderCajaPendingHandover(byDriver) {
         </div>`
       : '';
 
-    // Desglose detallado de cada carrera pendiente (auditoría)
+    // Desglose detallado de cada carrera pendiente (auditoría + entrega parcial)
     const items = Array.isArray(d.items) ? [...d.items] : [];
     items.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
     const itemsHtml = items.length ? items.map(it => {
@@ -6943,6 +6943,8 @@ function renderCajaPendingHandover(byDriver) {
         const v = convertToUsd(it.amount, it.currency);
         if (v) usdEq = ' ≈ ' + fmtUsd(v.usd);
       }
+      const tripId = String(it.trip_id || '').replace(/'/g, "\\'");
+      const dateStr = String(it.date || '').replace(/'/g, "\\'");
       return `<div style="display:flex;align-items:start;gap:8px;padding:7px 10px;border-top:1px solid var(--brd);font-size:11px">
         <div style="font-size:14px;line-height:1.2">💵</div>
         <div style="flex:1;min-width:0">
@@ -6956,6 +6958,7 @@ function renderCajaPendingHandover(byDriver) {
         <div style="text-align:right;white-space:nowrap">
           <div style="font-weight:600;color:var(--txt)">${fmt(it.amount)} ${it.currency}</div>
           <div style="font-size:10px;color:var(--txt3)">${usdEq}</div>
+          <button onclick="markTripHandedOver('${tripId}','${dateStr}')" title="Recibí solo esta carrera" style="margin-top:4px;background:var(--g);color:#fff;border:none;border-radius:5px;padding:3px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">✓ Recibí</button>
         </div>
       </div>`;
     }).join('') : '<div style="padding:10px;color:var(--txt3);text-align:center;font-size:11px">Sin detalles.</div>';
@@ -6986,6 +6989,50 @@ function togglePendingHandoverDetail(drvId) {
 }
 
 // ── Marca todos los pagos efectivo pendientes de un chofer como entregados ──
+// ── Marcar UNA sola carrera como entregada (entrega parcial) ──
+// Toma una trip por su trip_id + date, busca su payment con
+// status='pending_handover' y lo cambia a 'handed_over'. Útil cuando
+// el chofer entrega solo parte del efectivo y queremos marcar
+// individualmente cada carrera recibida.
+async function markTripHandedOver(tripId, date) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  if (!confirm('¿Marcar esta carrera como entregada? El monto entrará a caja.')) return;
+  try {
+    const snap = await fbRef.ref(`trips/${date}/${tripId}`).once('value');
+    const t = snap.val();
+    if (!t) { toast('Carrera no encontrada'); return; }
+    const nowIso = new Date().toISOString();
+    let newPays;
+    let changed = false;
+    if (Array.isArray(t.payments) && t.payments.length) {
+      newPays = t.payments.map(p => {
+        if (p && p.status === 'pending_handover') {
+          changed = true;
+          return { ...p, status: 'handed_over', handed_over_at: nowIso };
+        }
+        return p;
+      });
+    } else if (t.amount && (t.cobro === 'efectivo' || !t.cobro)) {
+      // Carrera legacy en efectivo: sintetizar payment
+      changed = true;
+      newPays = [{
+        amount: t.amount,
+        currency: t.currency || 'CUP',
+        cobro: 'efectivo',
+        status: 'handed_over',
+        paid_at: t.date + 'T' + (t.time || '00:00') + ':00',
+        handed_over_at: nowIso
+      }];
+    }
+    if (!changed) { toast('Esta carrera ya está entregada o no aplica'); return; }
+    await fbRef.ref(`trips/${date}/${tripId}`).update({ payments: newPays });
+    toast('✓ Carrera marcada como entregada');
+    loadCaja();
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
 async function markDriverHandover(driverId) {
   if (!confirm('¿Confirmás que recibiste TODO el efectivo pendiente de este chofer? Los montos pasarán a caja.')) return;
   if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
