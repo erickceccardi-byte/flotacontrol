@@ -5306,6 +5306,34 @@ async function deleteAnticipoAdriana(id) {
 }
 
 // Renderiza la sección "Fondo Adriana" en la pestaña Caja
+// Helpers para fechas con día de la semana
+const DIAS_SEMANA_FULL  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const DIAS_SEMANA_SHORT = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+function diaSemanaShort(dateStr) {
+  if (!dateStr) return '';
+  try { return DIAS_SEMANA_SHORT[new Date(dateStr + 'T12:00:00').getDay()]; }
+  catch(e) { return ''; }
+}
+function diaSemanaFull(dateStr) {
+  if (!dateStr) return '';
+  try { return DIAS_SEMANA_FULL[new Date(dateStr + 'T12:00:00').getDay()]; }
+  catch(e) { return ''; }
+}
+// Color del badge de día — fines de semana destacados
+function colorDiaSemana(dateStr) {
+  if (!dateStr) return { bg:'var(--bg2)', txt:'var(--txt2)' };
+  try {
+    const d = new Date(dateStr + 'T12:00:00').getDay();
+    if (d === 0) return { bg:'#FEE2E2', txt:'#991B1B' };  // Domingo rojo
+    if (d === 6) return { bg:'#DBEAFE', txt:'#1E40AF' };  // Sábado azul
+    return { bg:'var(--bg2)', txt:'var(--txt2)' };
+  } catch(e) { return { bg:'var(--bg2)', txt:'var(--txt2)' }; }
+}
+
+// Estado de expansión "ver todo el historial Adriana"
+let _adrianaShowAll = false;
+function toggleAdrianaShowAll() { _adrianaShowAll = !_adrianaShowAll; loadCaja(); }
+
 async function renderCajaAdriana(allTrips) {
   const el = $('caja-adriana');
   if (!el) return;
@@ -5320,14 +5348,20 @@ async function renderCajaAdriana(allTrips) {
   const fmt = n => Math.round(n).toLocaleString('es');
   const colorSaldo = saldo < 0 ? 'var(--re)' : saldo === 0 ? 'var(--txt2)' : 'var(--g)';
 
+  // Helper: badge de día de la semana
+  const diaBadge = (dateStr) => {
+    const c = colorDiaSemana(dateStr);
+    return `<span style="background:${c.bg};color:${c.txt};border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:4px">${diaSemanaShort(dateStr)}</span>`;
+  };
+
   let anticipoLines = '';
   if (anticipos.length) {
     const sorted = [...anticipos].sort((a,b) => (b.date||'').localeCompare(a.date||''));
     anticipoLines = sorted.map(a => `
       <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--brd);font-size:12px">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:500">+ ${fmt(a.amount)} CUP</div>
-          <div style="font-size:10px;color:var(--txt3)">${a.date}${a.descripcion ? ' · ' + a.descripcion : ''}</div>
+          <div style="font-weight:500;color:var(--g)">+ ${fmt(a.amount)} CUP</div>
+          <div style="font-size:10px;color:var(--txt3);margin-top:2px">${diaBadge(a.date)}${a.date}${a.descripcion ? ' · ' + a.descripcion : ''}</div>
         </div>
         <button onclick="openAnticipoAdrianaModal('${a.anticipo_id}')" style="background:none;border:none;color:var(--txt2);cursor:pointer;font-size:13px;padding:0 4px">✎</button>
         <button onclick="deleteAnticipoAdriana('${a.anticipo_id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:14px;padding:0 4px">✕</button>
@@ -5336,36 +5370,119 @@ async function renderCajaAdriana(allTrips) {
   }
 
   let consumosLines = '';
+  let consumosFooter = '';
   if (carrerasAdriana.length) {
     const sorted = [...carrerasAdriana].sort((a,b) => ((b.date||'')+(b.time||'')).localeCompare((a.date||'')+(a.time||'')));
-    consumosLines = sorted.slice(0, 10).map(t => `
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
-        <span style="color:var(--txt2)">${t.date} · ${t.time||''} · ${t.driverName || '?'}</span>
+    const limit = _adrianaShowAll ? sorted.length : 10;
+    consumosLines = sorted.slice(0, limit).map(t => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--brd);font-size:11px">
+        <span style="color:var(--txt2)">${diaBadge(t.date)}${t.date} · ${t.time||''} · ${t.driverName || '?'}</span>
         <span style="color:var(--re);font-weight:500">− ${fmt(t.amount)} CUP</span>
       </div>
     `).join('');
-    if (carrerasAdriana.length > 10) {
-      consumosLines += `<div style="font-size:11px;color:var(--txt3);text-align:center;padding:5px 0">… ${carrerasAdriana.length - 10} más</div>`;
+    if (sorted.length > 10) {
+      consumosFooter = `<button onclick="toggleAdrianaShowAll()" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">${_adrianaShowAll ? '▴ Mostrar solo 10' : '▾ Ver todo el historial (' + sorted.length + ' carreras)'}</button>`;
     }
   }
 
   el.innerHTML = `
     <div class="card" style="padding:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <div>
           <div style="font-size:11px;color:var(--txt3)">Saldo disponible del fondo</div>
           <div style="font-size:24px;font-weight:700;color:${colorSaldo}">${saldo<0?'-':''}${fmt(Math.abs(saldo))} CUP</div>
         </div>
-        <button class="btn btnacc" onclick="openAnticipoAdrianaModal()" style="white-space:nowrap;padding:8px 12px;font-size:12px">+ Anticipo</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btnacc" onclick="openAnticipoAdrianaModal()" style="white-space:nowrap;padding:8px 12px;font-size:12px">+ Anticipo</button>
+          <button class="btn" onclick="exportAdrianaWhatsApp()" style="white-space:nowrap;padding:8px 12px;font-size:12px;background:#25D366;color:#fff;border:none" title="Copiar resumen para WhatsApp">📋 WhatsApp</button>
+        </div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--txt2);padding-top:6px;border-top:1px dashed var(--brd)">
         <span>Anticipos recibidos: <strong>+${fmt(totalAnticipos)} CUP</strong></span>
         <span>Carreras consumidas: <strong style="color:var(--re)">−${fmt(totalConsumido)} CUP</strong></span>
       </div>
       ${anticipoLines ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase">Anticipos</div>${anticipoLines}</div>` : ''}
-      ${consumosLines ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase">Últimas carreras consumidas</div>${consumosLines}</div>` : ''}
+      ${consumosLines ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase">${_adrianaShowAll ? 'Todas las carreras consumidas' : 'Últimas carreras consumidas'}</div>${consumosLines}${consumosFooter}</div>` : ''}
     </div>
   `;
+}
+
+// ── Exportar resumen del fondo Adriana para WhatsApp ──
+// Genera texto plano listo para pegar en un chat. Incluye:
+// - Saldo actual con destaque
+// - Lista de anticipos (fecha + día + monto + descripción)
+// - Lista de carreras consumidas (fecha + día + chofer + monto)
+async function exportAdrianaWhatsApp() {
+  try {
+    const anticipos = await fetchAnticiposAdriana();
+    // Re-fetch trips para tener todo (no solo del rango activo)
+    let allTrips = [];
+    if (fbRef && isOnline) {
+      try {
+        const tSnap = await fbRef.ref('trips').once('value');
+        const days = tSnap.val() || {};
+        Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
+          if (t && typeof t === 'object') allTrips.push(t);
+        }));
+      } catch(e) {}
+    }
+    const carreras = allTrips.filter(t => t && t.source === 'adriana' && t.payment_status !== 'pending');
+    const fmt = n => Math.round(n).toLocaleString('es');
+    const totalA = anticipos.reduce((s,a) => s + (a.amount || 0), 0);
+    const totalC = carreras.reduce((s,t) => s + (t.amount || 0), 0);
+    const saldo  = totalA - totalC;
+    const hoy = new Date();
+    const hoyStr = hoy.toLocaleDateString('es', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+    let txt = `*🚗 FONDO ADRIANA — Resumen*\n`;
+    txt += `_Generado ${hoyStr}_\n\n`;
+    txt += `💰 *Saldo disponible:* ${saldo < 0 ? '−' : ''}${fmt(Math.abs(saldo))} CUP\n`;
+    txt += `   ✅ Anticipos: +${fmt(totalA)} CUP\n`;
+    txt += `   ❌ Consumido: −${fmt(totalC)} CUP\n`;
+    txt += `\n────────────────────\n`;
+
+    // Anticipos
+    if (anticipos.length) {
+      txt += `\n📥 *ANTICIPOS RECIBIDOS*\n`;
+      const sortedA = [...anticipos].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+      sortedA.forEach(a => {
+        const dia = diaSemanaShort(a.date);
+        txt += `• ${dia} ${a.date}: +${fmt(a.amount)} CUP`;
+        if (a.descripcion) txt += ` (${a.descripcion})`;
+        txt += `\n`;
+      });
+    }
+
+    // Carreras agrupadas por chofer
+    if (carreras.length) {
+      txt += `\n🚖 *CARRERAS CONSUMIDAS* (${carreras.length})\n`;
+      const sortedC = [...carreras].sort((a,b) => ((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||'')));
+      sortedC.forEach(t => {
+        const dia = diaSemanaShort(t.date);
+        txt += `• ${dia} ${t.date} ${t.time||''} · ${t.driverName||'?'}: −${fmt(t.amount)} CUP\n`;
+      });
+    }
+
+    txt += `\n────────────────────\n`;
+    txt += `_FlotaControl · ecocargo.app_`;
+
+    // Copiar al portapapeles
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(txt);
+      toast('✓ Resumen copiado al portapapeles');
+    } else {
+      // Fallback: textarea
+      const ta = document.createElement('textarea');
+      ta.value = txt;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast('✓ Resumen copiado');
+    }
+  } catch(e) {
+    toast('Error al copiar: ' + e.message);
+  }
 }
 
 // ════════════════════════════════════════
