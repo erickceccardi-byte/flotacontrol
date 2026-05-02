@@ -5558,20 +5558,44 @@ async function saveEditTrip() {
     payment_status = 'paid';
     payments = []; // Crédito (Marco/Lorenzo) — no hay cobro real
   } else {
-    // Construir payments: principal + extras
+    // Preservar el status del payment principal anterior (handed_over /
+    // verified / etc.) al editar — sino al cambiar el cobro de "efectivo"
+    // a "transferencia" perderíamos el estado de "ya entregado". Mismo
+    // criterio para los extras: emparejamos por monto+currency+cobro.
+    const oldPays = (oldTrip && Array.isArray(oldTrip.payments) && oldTrip.payments.length) ? oldTrip.payments : [];
+    const oldPrincipal = oldPays.find(p => !p.is_tip) || oldPays[0];
+    const principalStatus = oldPrincipal && oldPrincipal.status
+      ? // Si admin cambió el cobro de efectivo↔transferencia, ajustar el
+        // status para que sea coherente: handed_over (efectivo) vs verified
+        // (transferencia). Pero NO bajar de "ya recibido" a "pendiente".
+        ((oldPrincipal.status === 'handed_over' && cobro === 'transferencia') ? 'verified'
+         : (oldPrincipal.status === 'verified' && cobro === 'efectivo')      ? 'handed_over'
+         : oldPrincipal.status)
+      : initialPaymentStatus(cobro, source);
     payments = [{
       amount: amt, currency, cobro,
-      status: initialPaymentStatus(cobro, source),
-      paid_at: nowIso
+      status: principalStatus,
+      paid_at: oldPrincipal?.paid_at || nowIso,
+      ...(oldPrincipal?.handed_over_at ? { handed_over_at: oldPrincipal.handed_over_at } : {}),
+      ...(oldPrincipal?.verified_at    ? { verified_at: oldPrincipal.verified_at }       : {}),
     }];
     for (const ep of extras) {
       if (!ep || !ep.amount) continue;
+      // Buscar match anterior por monto+currency+cobro para preservar status
+      const epCobro = ep.cobro || cobro;
+      const oldEp = oldPays.find(p => !p.is_tip && p !== oldPrincipal
+        && p.amount === ep.amount && (p.currency||'CUP') === (ep.currency||'CUP') && (p.cobro||'') === epCobro);
+      const epStatus = oldEp && oldEp.status
+        ? oldEp.status
+        : initialPaymentStatus(epCobro, source);
       payments.push({
         amount: ep.amount,
         currency: ep.currency || 'CUP',
-        cobro: ep.cobro || cobro,
-        status: initialPaymentStatus(ep.cobro || cobro, source),
-        paid_at: nowIso
+        cobro: epCobro,
+        status: epStatus,
+        paid_at: oldEp?.paid_at || nowIso,
+        ...(oldEp?.handed_over_at ? { handed_over_at: oldEp.handed_over_at } : {}),
+        ...(oldEp?.verified_at    ? { verified_at: oldEp.verified_at }       : {}),
       });
     }
   }
