@@ -1686,6 +1686,28 @@ function migrateTraccarUrl() {
   } catch(e) {}
 }
 
+// ── Credenciales read-only de Traccar ──
+// El usuario read-only "pwa@ecocargo.local" tiene acceso solo de lectura
+// a los dispositivos GPS (no puede modificar nada). Lo creamos en Traccar
+// para que la PWA se conecte automáticamente sin pedir credenciales al
+// admin. Sigue siendo posible que el admin sobreescriba esto en Config →
+// Traccar con sus credenciales personales si las prefiere.
+const TRACCAR_DEFAULTS = Object.freeze({
+  url: 'https://ecocargo.app/traccar',
+  email: 'pwa@ecocargo.local',
+  pass: 'ecocargo2026admin',
+});
+function getTraccarConfig() {
+  const cfg = getCfg();
+  const tc = cfg.traccar || {};
+  // Si admin no tiene config personal, usamos los defaults read-only
+  return {
+    url:   tc.url   || TRACCAR_DEFAULTS.url,
+    email: tc.email || TRACCAR_DEFAULTS.email,
+    pass:  tc.pass  || TRACCAR_DEFAULTS.pass,
+  };
+}
+
 // ════════════════════════════════════════
 // INDEXEDDB
 // ════════════════════════════════════════
@@ -2080,6 +2102,9 @@ function doLogin() {
       currentUser = { role: 'admin', name: 'Administrador', id: 'admin' };
       saveSession();
       showScreen('admin');
+      // Auto-conectar Traccar en background usando defaults read-only
+      // (o credenciales personalizadas del admin si están guardadas).
+      setTimeout(() => { try { connTraccar(true); } catch(e) {} }, 100);
       return;
     }
   }
@@ -2118,6 +2143,8 @@ function tryRestoreSession() {
   currentUser = saved;
   if (saved.role === 'admin') {
     showScreen('admin');
+    // Auto-conectar Traccar al restaurar sesión admin
+    setTimeout(() => { try { connTraccar(true); } catch(e) {} }, 100);
   } else {
     showDriverScreen();
   }
@@ -4390,18 +4417,59 @@ async function doImport(input) {
 // ════════════════════════════════════════
 // GPS / TRACCAR
 // ════════════════════════════════════════
-async function connTraccar() {
-  const url   = $('tc-url').value.trim();
-  const email = $('tc-email').value.trim();
-  const pass  = $('tc-pass').value;
-  if (!email || !pass) { showTcMsg('Ingresa email y contraseña','r'); return; }
-  const cfg = getCfg(); cfg.traccar = { url, email, pass }; setCfg(cfg);
+async function connTraccar(silent) {
+  // Si vienen credenciales en el form (admin las personalizó), las guardamos
+  // como override. Si el form está vacío, usamos los defaults read-only.
+  let url, email, pass;
+  const fromForm = !silent && $('tc-url') && $('tc-email') && $('tc-pass');
+  if (fromForm && $('tc-email').value.trim() && $('tc-pass').value) {
+    url   = $('tc-url').value.trim() || TRACCAR_DEFAULTS.url;
+    email = $('tc-email').value.trim();
+    pass  = $('tc-pass').value;
+    const cfg = getCfg(); cfg.traccar = { url, email, pass }; setCfg(cfg);
+  } else {
+    const tc = getTraccarConfig();
+    url = tc.url; email = tc.email; pass = tc.pass;
+  }
   try {
     const res = await fetch(url+'/api/devices', { headers: { 'Authorization':'Basic '+btoa(email+':'+pass), 'Accept':'application/json' } });
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     tcDevices = await res.json(); tcConn = true;
-    showTcMsg(`Conectado — ${tcDevices.length} dispositivo(s)`, 'g');
-  } catch(e) { tcConn = false; showTcMsg('No se pudo conectar. Verifica credenciales.','r'); }
+    if (!silent) showTcMsg(`Conectado — ${tcDevices.length} dispositivo(s)`, 'g');
+    // Auto-construir mapping chofer→deviceId por nombre cada vez que conectamos
+    autoMapDriversToTraccarDevices();
+  } catch(e) {
+    tcConn = false;
+    if (!silent) showTcMsg('No se pudo conectar a GPS. ' + (e.message || ''), 'r');
+    else console.warn('[Traccar] auto-connect failed:', e);
+  }
+}
+
+// ── Auto-mapeo chofer ↔ Traccar device por NOMBRE ──
+// Match case-insensitive entre el nombre del dispositivo Traccar y el
+// nombre del chofer. Llena cfg.gpsMap (driverId → traccar_unique_id) y
+// también el mapping inverso usado por findTraccarDeviceId.
+function autoMapDriversToTraccarDevices() {
+  if (!tcDevices || !tcDevices.length) return;
+  const drivers = getDrivers();
+  const cfg = getCfg();
+  cfg.gpsMap = cfg.gpsMap || {};
+  let changed = false;
+  for (const drv of drivers) {
+    if (cfg.gpsMap[drv.id]) continue; // ya tiene mapping manual, no pisar
+    const drvName = (drv.name || '').toLowerCase().trim();
+    if (!drvName) continue;
+    // Buscar device cuyo nombre (lowercase) sea igual o contenga el nombre del chofer
+    const dev = tcDevices.find(d => {
+      const dn = (d.name || '').toLowerCase().trim();
+      return dn === drvName || dn.includes(drvName) || drvName.includes(dn);
+    });
+    if (dev) {
+      cfg.gpsMap[drv.id] = dev.uniqueId || dev.id;
+      changed = true;
+    }
+  }
+  if (changed) setCfg(cfg);
 }
 
 function showTcMsg(m,t) { $('tc-msg').innerHTML=`<div class="alert ${t}" style="margin-top:8px">${m}</div>`; setTimeout(()=>{ if($('tc-msg'))$('tc-msg').innerHTML=''; },4000); }
@@ -4425,13 +4493,14 @@ async function loadGPS() {
     const did = mappedDriver ? mappedDriver.id : ('device_' + d.id);
     const [bg,col] = COLS[i%COLS.length];
     const fp = `?deviceId=${d.id}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-    const aH = { 'Authorization':'Basic '+btoa(cfg.traccar.email+':'+cfg.traccar.pass), 'Accept':'application/json' };
+    const tcCfg = getTraccarConfig();
+    const aH = { 'Authorization':'Basic '+btoa(tcCfg.email+':'+tcCfg.pass), 'Accept':'application/json' };
     let km=0,stops=0,vmax=0;
     try {
       // Calcular km reales desde posiciones (filtra GPS drift - solo cuenta velocidad > 5km/h)
       const [positions, stp] = await Promise.all([
-        fetch(cfg.traccar.url+'/api/positions'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[]),
-        fetch(cfg.traccar.url+'/api/reports/stops'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[])
+        fetch(tcCfg.url+'/api/positions'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[]),
+        fetch(tcCfg.url+'/api/reports/stops'+fp,{headers:aH}).then(r=>r.ok?r.json():[]).catch(()=>[])
       ]);
       // Haversine: distancia real entre dos puntos GPS
       const hav = (a,b,c,e)=>{const R=6371,dL=(c-a)*Math.PI/180,dO=(e-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)**2;return R*2*Math.asin(Math.sqrt(x));};
@@ -4498,11 +4567,11 @@ function initGpsTab() {
   }
   // Default: hoy
   if ($('gps-date') && !$('gps-date').value) $('gps-date').value = todayStr();
-  // Auto-conectar Traccar si hay credenciales
-  const cfg = getCfg();
-  if (cfg.traccar && cfg.traccar.email && cfg.traccar.pass && !tcConn) {
-    connTraccar().then(() => loadGPSMap()).catch(()=>{});
-  } else if (tcConn) {
+  // Auto-conectar Traccar (siempre, usando defaults read-only si admin
+  // no personalizó credenciales). El silent=true evita el banner de éxito.
+  if (!tcConn) {
+    connTraccar(true).then(() => { if (tcConn) loadGPSMap(); }).catch(()=>{});
+  } else {
     loadGPSMap();
   }
 }
@@ -4586,12 +4655,12 @@ async function refreshGpsDailyKm(date, driverId, force = false) {
   const todayCal = todayStr();
   if (existing && existing.is_final && !force && date < todayCal) return existing;
 
-  const cfg = getCfg();
+  const tcCfg = getTraccarConfig();
   const from = `${date}T00:00:00.000Z`;
   const to   = `${date}T23:59:59.999Z`;
-  const url  = `${cfg.traccar.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const url  = `${tcCfg.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const headers = {
-    'Authorization': 'Basic ' + btoa(cfg.traccar.email + ':' + cfg.traccar.pass),
+    'Authorization': 'Basic ' + btoa(tcCfg.email + ':' + tcCfg.pass),
     'Accept': 'application/json'
   };
   let positions;
@@ -4629,12 +4698,10 @@ let _lastGpsRefresh = 0;
 async function refreshTodayKmIfAdmin() {
   if (!currentUser || currentUser.role !== 'admin') return;
   if (Date.now() - _lastGpsRefresh < 60000) return; // cool-down 1 min
-  // Si Traccar no está conectado, intentar conectar primero
+  // Si Traccar no está conectado, intentar conectar silenciosamente
+  // (usa defaults read-only o creds del admin si las personalizó)
   if (!tcConn) {
-    const cfg = getCfg();
-    if (cfg.traccar && cfg.traccar.email && cfg.traccar.pass) {
-      try { await connTraccar(); } catch(e) {}
-    }
+    try { await connTraccar(true); } catch(e) {}
   }
   if (!tcConn) return;
   _lastGpsRefresh = Date.now();
@@ -4706,12 +4773,12 @@ async function loadGPSMap() {
   }
 
   // Pedir posiciones a Traccar API via /traccar (proxy Caddy)
-  const cfg = getCfg();
+  const tcCfg = getTraccarConfig();
   const from = `${date}T00:00:00.000Z`;
   const to   = `${date}T23:59:59.999Z`;
-  const url  = `${cfg.traccar.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const url  = `${tcCfg.url}/api/positions?deviceId=${traccarDevId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
   const headers = {
-    'Authorization': 'Basic ' + btoa(cfg.traccar.email + ':' + cfg.traccar.pass),
+    'Authorization': 'Basic ' + btoa(tcCfg.email + ':' + tcCfg.pass),
     'Accept': 'application/json'
   };
   let positions;
