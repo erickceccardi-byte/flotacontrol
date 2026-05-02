@@ -2842,15 +2842,26 @@ async function loadDetalle() {
   // Traer TODAS las trips del chofer (necesario para salario/propina/bono globales).
   // El período sólo se usa para los cards de "consolidado USD" del top y la
   // lista de carreras del bottom.
+  // Estrategia robusta: pedimos directo a PocketBase con un filter por driverId
+  // (evita confiar en el polyfill que arma una estructura anidada).
   let allTripsAllTime = [];
   if (fbRef && isOnline) {
     try {
-      const tSnap = await fbRef.ref('trips').once('value');
-      const days = tSnap.val() || {};
-      Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
-        if (t && typeof t === 'object' && t.driverId === driverId) allTripsAllTime.push(t);
-      }));
-    } catch(e) {}
+      // Llamada directa: filtramos por driverId en el server, paginamos
+      const items = await pbList('trips', [['driverId', driverId]], { perPage: 500, sort: '-date,-time' });
+      allTripsAllTime = items.map(it => pbStripMeta(it));
+      console.log('[Detalle] fetch trips: chofer=' + driverId + ' count=' + allTripsAllTime.length);
+    } catch(e) {
+      console.error('[Detalle] fetch trips error:', e);
+      // Fallback: intentar con polyfill
+      try {
+        const tSnap = await fbRef.ref('trips').once('value');
+        const days = tSnap.val() || {};
+        Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
+          if (t && typeof t === 'object' && t.driverId === driverId) allTripsAllTime.push(t);
+        }));
+      } catch(e2) { console.error('[Detalle] polyfill fallback also failed:', e2); }
+    }
   } else {
     // Sin conexión: leer IDB de los últimos 730 días
     const today = new Date(); today.setHours(0,0,0,0);
@@ -3004,16 +3015,19 @@ async function loadDetalle() {
       </div>`;
     }).join('');
   }
-  renderPagosList('det-pagos-list', pagosSalario);
-  renderPagosList('det-tip-pagos-list', pagosPropina);
-  renderPagosList('det-bonus-pagos-list', pagosBono);
+  try { renderPagosList('det-pagos-list', pagosSalario); } catch(e) { console.error('renderPagosList salario', e); }
+  try { renderPagosList('det-tip-pagos-list', pagosPropina); } catch(e) { console.error('renderPagosList tip', e); }
+  try { renderPagosList('det-bonus-pagos-list', pagosBono); } catch(e) { console.error('renderPagosList bono', e); }
 
   // ─── Desglose por carrera (auditoría) ───
-  // Salario: cada carrera contribuye = neto * salaryPct (facturados) o
-  //                                   = bruto * salaryPct (socios)
-  renderDetalleBreakdown('det-salario-breakdown', allTripsAllTime, 'salario', salaryPct, cupRate);
-  renderDetalleBreakdown('det-propina-breakdown', allTripsAllTime, 'propina', null, cupRate);
-  renderDetalleBreakdown('det-bono-breakdown', trips90, 'bono', bonusPct, cupRate);
+  // Cada uno envuelto en try/catch para no romper la lista de carreras
+  // del bottom si algún cálculo falla.
+  try { renderDetalleBreakdown('det-salario-breakdown', allTripsAllTime, 'salario', salaryPct, cupRate); }
+  catch(e) { console.error('breakdown salario', e); }
+  try { renderDetalleBreakdown('det-propina-breakdown', allTripsAllTime, 'propina', null, cupRate); }
+  catch(e) { console.error('breakdown propina', e); }
+  try { renderDetalleBreakdown('det-bono-breakdown', trips90, 'bono', bonusPct, cupRate); }
+  catch(e) { console.error('breakdown bono', e); }
 
   // ── Bono trimestral (5% del neto USD acumulado en últimos 90 días) ──
   const bonusPct = getBonusPercent();
@@ -3128,42 +3142,53 @@ async function loadDetalle() {
   // Carreras: SIEMPRE muestra TODAS las del chofer (no se filtra por período)
   // para que admin pueda editar cualquier carrera independientemente del
   // selector de Día/Semana/Mes. Agrupadas por fecha, más recientes arriba.
-  // Tiene su propio header con badge del período seleccionado vs todo.
+  // Wrap todo en try/catch + log para que cualquier error sea visible y no
+  // rompa el render silenciosamente.
   const tripsEl = $('det-trips');
   if (tripsEl) {
-    const trips_for_list = allTripsAllTime;
-    if (!trips_for_list.length) {
-      tripsEl.innerHTML = '<div style="font-size:13px;color:var(--txt3);text-align:center;padding:14px">Sin carreras registradas para este chofer.</div>';
-    } else {
-      // Agrupar por fecha
-      const byDate = {};
-      trips_for_list.forEach(t => {
-        if (!byDate[t.date]) byDate[t.date] = [];
-        byDate[t.date].push(t);
-      });
-      const datesSorted = Object.keys(byDate).sort().reverse(); // recientes primero
-      const periodSet = new Set(range.dates);
-      tripsEl.innerHTML = datesSorted.map(d => {
-        const list = byDate[d].sort((a,b) => (b.time||'').localeCompare(a.time||''));
-        const dayBruto = list.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
-        const dayNeto  = list.reduce((s,t) => s + getTripUsd(t, 'netAmount'), 0);
-        const dayLbl   = new Date(d + 'T12:00:00').toLocaleDateString('es', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
-        const inPeriod = periodSet.has(d);
-        const periodTag = inPeriod
-          ? '<span style="font-size:9px;background:var(--gbg);color:var(--g);border:1px solid var(--gbrd);border-radius:4px;padding:1px 6px;margin-left:6px">período</span>'
-          : '';
-        return `
-          <div style="margin-top:10px">
-            <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg2);padding:6px 12px;border-radius:8px 8px 0 0;border:1px solid var(--brd);border-bottom:none">
-              <span style="font-size:12px;font-weight:600;color:var(--txt2)">${dayLbl}${periodTag}</span>
-              <span style="font-size:11px;color:var(--txt3)">${list.length} carr · ${fmtUsd(dayNeto)} neto · ${fmtUsd(dayBruto)} bruto</span>
+    try {
+      const trips_for_list = Array.isArray(allTripsAllTime) ? allTripsAllTime : [];
+      console.log('[Detalle] det-trips render: chofer=' + driverId + ' total=' + trips_for_list.length);
+      if (!trips_for_list.length) {
+        tripsEl.innerHTML = '<div style="font-size:13px;color:var(--txt3);text-align:center;padding:14px">Sin carreras registradas para este chofer.</div>';
+      } else {
+        // Agrupar por fecha
+        const byDate = {};
+        trips_for_list.forEach(t => {
+          const d = (t && t.date) || 'sin-fecha';
+          if (!byDate[d]) byDate[d] = [];
+          byDate[d].push(t);
+        });
+        const datesSorted = Object.keys(byDate).sort().reverse(); // recientes primero
+        const periodSet = new Set(range.dates || []);
+        tripsEl.innerHTML = datesSorted.map(d => {
+          const list = byDate[d].sort((a,b) => (b.time||'').localeCompare(a.time||''));
+          const dayBruto = list.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
+          const dayNeto  = list.reduce((s,t) => s + getTripUsd(t, 'netAmount'), 0);
+          let dayLbl = d;
+          try {
+            dayLbl = new Date(d + 'T12:00:00').toLocaleDateString('es', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+          } catch(e) {}
+          const inPeriod = periodSet.has(d);
+          const periodTag = inPeriod
+            ? '<span style="font-size:9px;background:var(--gbg);color:var(--g);border:1px solid var(--gbrd);border-radius:4px;padding:1px 6px;margin-left:6px">período</span>'
+            : '';
+          return `
+            <div style="margin-top:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg2);padding:6px 12px;border-radius:8px 8px 0 0;border:1px solid var(--brd);border-bottom:none">
+                <span style="font-size:12px;font-weight:600;color:var(--txt2)">${dayLbl}${periodTag}</span>
+                <span style="font-size:11px;color:var(--txt3)">${list.length} carr · ${fmtUsd(dayNeto)} neto · ${fmtUsd(dayBruto)} bruto</span>
+              </div>
+              <div style="border:1px solid var(--brd);border-top:none;border-radius:0 0 8px 8px;padding:4px 8px">
+                ${list.map(t => tripHTML(t, true)).join('')}
+              </div>
             </div>
-            <div style="border:1px solid var(--brd);border-top:none;border-radius:0 0 8px 8px;padding:4px 8px">
-              ${list.map(t => tripHTML(t, true)).join('')}
-            </div>
-          </div>
-        `;
-      }).join('');
+          `;
+        }).join('');
+      }
+    } catch(e) {
+      console.error('[Detalle] det-trips render error:', e);
+      tripsEl.innerHTML = '<div style="padding:14px;color:var(--re);font-size:12px;text-align:center">Error mostrando carreras: ' + (e.message || e) + '</div>';
     }
   }
 }
