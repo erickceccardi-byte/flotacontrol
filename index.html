@@ -1154,13 +1154,15 @@ audio{width:100%;height:36px;margin-top:6px}
         <summary style="cursor:pointer;font-size:13px;color:var(--txt2);padding:6px 0;font-weight:500">⚙ Configuración Traccar</summary>
         <div class="card" style="margin-top:6px">
           <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
-            La PWA usa proxy interno hacia <code>gps.ecocargo.app</code> via <code>ecocargo.app/traccar/api</code> (sin CORS).
-            Solo tenés que ingresar las credenciales del admin Traccar la primera vez.
+            La PWA se conecta automáticamente al servicio GPS con un usuario de solo-lectura predefinido. Solo necesitás llenar estos campos si querés usar tus credenciales personales del admin de Traccar (opcional).
           </div>
           <div class="field"><label>URL servidor (proxy)</label><input type="url" id="tc-url" value="https://ecocargo.app/traccar"></div>
-          <div class="field"><label>Email</label><input type="email" id="tc-email"></div>
-          <div class="field"><label>Contraseña</label><input type="password" id="tc-pass"></div>
-          <button class="btn btnacc" onclick="connTraccar()">Conectar / Actualizar</button>
+          <div class="field"><label>Email <span style="color:var(--txt3);font-weight:400">(opcional)</span></label><input type="email" id="tc-email" placeholder="dejar vacío para auto"></div>
+          <div class="field"><label>Contraseña <span style="color:var(--txt3);font-weight:400">(opcional)</span></label><input type="password" id="tc-pass" placeholder="dejar vacío para auto"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btnacc" onclick="connTraccar()">Conectar / Actualizar</button>
+            <button class="btn" onclick="resetTraccarCreds()" style="background:var(--bg2)">↺ Volver a auto</button>
+          </div>
           <div id="tc-msg" style="margin-top:6px"></div>
         </div>
 
@@ -4418,8 +4420,10 @@ async function doImport(input) {
 // GPS / TRACCAR
 // ════════════════════════════════════════
 async function connTraccar(silent) {
-  // Si vienen credenciales en el form (admin las personalizó), las guardamos
-  // como override. Si el form está vacío, usamos los defaults read-only.
+  // Estrategia: si admin entró credenciales en el form, las usamos (y las
+  // guardamos). Si no, intentamos primero las creds personalizadas de
+  // localStorage; si fallan, caemos a los defaults read-only. Esto evita
+  // que credenciales viejas/incorrectas bloqueen el GPS permanentemente.
   let url, email, pass;
   const fromForm = !silent && $('tc-url') && $('tc-email') && $('tc-pass');
   if (fromForm && $('tc-email').value.trim() && $('tc-pass').value) {
@@ -4431,17 +4435,38 @@ async function connTraccar(silent) {
     const tc = getTraccarConfig();
     url = tc.url; email = tc.email; pass = tc.pass;
   }
+  // Intento principal
+  let connected = false;
   try {
     const res = await fetch(url+'/api/devices', { headers: { 'Authorization':'Basic '+btoa(email+':'+pass), 'Accept':'application/json' } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    tcDevices = await res.json(); tcConn = true;
-    if (!silent) showTcMsg(`Conectado — ${tcDevices.length} dispositivo(s)`, 'g');
-    // Auto-construir mapping chofer→deviceId por nombre cada vez que conectamos
-    autoMapDriversToTraccarDevices();
+    if (res.ok) {
+      tcDevices = await res.json(); tcConn = true; connected = true;
+      console.log('[Traccar] connected as', email, '— devices:', tcDevices.length);
+    } else if (res.status === 401 && (email !== TRACCAR_DEFAULTS.email || pass !== TRACCAR_DEFAULTS.pass)) {
+      // Credenciales de usuario fallaron — fallback a defaults read-only
+      console.warn('[Traccar] user creds failed (401), falling back to defaults');
+      const fbRes = await fetch(TRACCAR_DEFAULTS.url+'/api/devices', {
+        headers: { 'Authorization':'Basic '+btoa(TRACCAR_DEFAULTS.email+':'+TRACCAR_DEFAULTS.pass), 'Accept':'application/json' }
+      });
+      if (fbRes.ok) {
+        tcDevices = await fbRes.json(); tcConn = true; connected = true;
+        // Limpiar las creds malas del localStorage para que no vuelvan a fallar
+        const cfg = getCfg(); delete cfg.traccar; setCfg(cfg);
+        console.log('[Traccar] fallback to defaults succeeded — cleared bad user creds');
+      }
+    } else {
+      throw new Error('HTTP ' + res.status);
+    }
   } catch(e) {
     tcConn = false;
     if (!silent) showTcMsg('No se pudo conectar a GPS. ' + (e.message || ''), 'r');
     else console.warn('[Traccar] auto-connect failed:', e);
+    return;
+  }
+  if (connected) {
+    if (!silent) showTcMsg(`Conectado — ${tcDevices.length} dispositivo(s)`, 'g');
+    // Auto-construir mapping chofer→deviceId por nombre cada vez que conectamos
+    autoMapDriversToTraccarDevices();
   }
 }
 
@@ -4473,6 +4498,22 @@ function autoMapDriversToTraccarDevices() {
 }
 
 function showTcMsg(m,t) { $('tc-msg').innerHTML=`<div class="alert ${t}" style="margin-top:8px">${m}</div>`; setTimeout(()=>{ if($('tc-msg'))$('tc-msg').innerHTML=''; },4000); }
+
+// ── Volver a credenciales auto (read-only) ──
+// Limpia las credenciales personalizadas de localStorage y reconecta usando
+// el usuario read-only por defecto. Útil si las credenciales del admin
+// expiraron o quedaron mal configuradas.
+async function resetTraccarCreds() {
+  if (!confirm('¿Volver a las credenciales automáticas de solo-lectura? Se borrarán las credenciales personalizadas.')) return;
+  const cfg = getCfg(); delete cfg.traccar; setCfg(cfg);
+  if ($('tc-email')) $('tc-email').value = '';
+  if ($('tc-pass'))  $('tc-pass').value = '';
+  if ($('tc-url'))   $('tc-url').value = TRACCAR_DEFAULTS.url;
+  tcConn = false; tcDevices = [];
+  await connTraccar();
+  // Volver a abrir el mapping y mapa con creds nuevas
+  if ($('atp-gps') && $('atp-gps').classList.contains('active')) initGpsTab();
+}
 
 async function loadGPS() {
   if (!tcConn) { showTcMsg('Conecta primero a Traccar','r'); return; }
