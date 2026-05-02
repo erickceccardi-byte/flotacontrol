@@ -6345,9 +6345,19 @@ async function loadCaja() {
       }
       // Pendiente de entrega del chofer (efectivo no entregado todavía)
       if (p.status === 'pending_handover') {
-        if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {}, notes: [] };
+        if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {}, notes: [], items: [] };
         if (!driverPending[drv].byCur[cur]) driverPending[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
         driverPending[drv].byCur[cur][cobro] += p.amount;
+        // Detalle de cada carrera pendiente para auditoría
+        driverPending[drv].items.push({
+          trip_id: t.trip_id || t.id,
+          date: t.date, time: t.time || '',
+          source: t.source,
+          amount: p.amount, currency: cur, cobro,
+          admin_note: t.admin_note || '',
+          driverName: t.driverName || drv,
+          updated: t.updated || '',
+        });
         if (t.admin_note && idx === 0) driverPending[drv].notes.push({
           date: t.date, time: t.time||'', text: t.admin_note,
           source: t.source, amount: t.amount, currency: t.currency
@@ -6857,6 +6867,7 @@ function renderCajaPendingHandover(byDriver) {
     return;
   }
   const fmt = n => Math.round(n).toLocaleString('es');
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
   el.innerHTML = drivers.map(([drvId, d]) => {
     const lines = [];
     let totalUsd = 0;
@@ -6882,16 +6893,59 @@ function renderCajaPendingHandover(byDriver) {
           </div>`).join('')}
         </div>`
       : '';
-    return `<div class="card" style="margin-bottom:8px;padding:12px${notesArr.length ? ';border-color:var(--ambrd);border-width:2px' : ''}">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-weight:600;font-size:15px">${d.name}${notesBadge}</div>
-        <div style="font-size:11px;color:var(--txt3)">≈ $${totalUsd.toFixed(2)} USD</div>
+
+    // Desglose detallado de cada carrera pendiente (auditoría)
+    const items = Array.isArray(d.items) ? [...d.items] : [];
+    items.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
+    const itemsHtml = items.length ? items.map(it => {
+      const tag = SRC[it.source] || it.source;
+      const noteLine = it.admin_note ? `<div style="font-size:10px;color:var(--am);margin-top:2px"><em>📝 ${it.admin_note}</em></div>` : '';
+      let usdEq = '';
+      if (it.currency === 'USD') usdEq = ' ≈ ' + fmtUsd(it.amount);
+      else if (fxCache) {
+        const v = convertToUsd(it.amount, it.currency);
+        if (v) usdEq = ' ≈ ' + fmtUsd(v.usd);
+      }
+      return `<div style="display:flex;align-items:start;gap:8px;padding:7px 10px;border-top:1px solid var(--brd);font-size:11px">
+        <div style="font-size:14px;line-height:1.2">💵</div>
+        <div style="flex:1;min-width:0">
+          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            <span class="badge ${BDGE[it.source]}" style="font-size:9px">${tag}</span>
+            <span style="color:var(--txt2);margin-left:4px">${it.date} ${it.time}</span>
+          </div>
+          <div style="font-size:10px;color:var(--txt3);margin-top:1px">trip_id ${(it.trip_id||'').slice(-12)}</div>
+          ${noteLine}
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-weight:600;color:var(--txt)">${fmt(it.amount)} ${it.currency}</div>
+          <div style="font-size:10px;color:var(--txt3)">${usdEq}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div style="padding:10px;color:var(--txt3);text-align:center;font-size:11px">Sin detalles.</div>';
+
+    return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden${notesArr.length ? ';border-color:var(--ambrd);border-width:2px' : ''}">
+      <div style="padding:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-weight:600;font-size:15px">${d.name}${notesBadge}</div>
+          <div style="font-size:11px;color:var(--txt3)">≈ $${totalUsd.toFixed(2)} USD</div>
+        </div>
+        ${lines.join('') || '<div style="color:var(--txt3);font-size:12px">Sin efectivo pendiente</div>'}
+        ${notesBlock}
+        <button onclick="togglePendingHandoverDetail('${drvId}')" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">▾ Ver desglose por carrera (${items.length})</button>
+        <button class="btn btnacc" style="margin-top:8px;width:100%" onclick="markDriverHandover('${drvId}')">Recibí entrega completa de ${d.name}</button>
       </div>
-      ${lines.join('') || '<div style="color:var(--txt3);font-size:12px">Sin efectivo pendiente</div>'}
-      ${notesBlock}
-      <button class="btn btnacc" style="margin-top:10px;width:100%" onclick="markDriverHandover('${drvId}')">Recibí entrega completa de ${d.name}</button>
+      <div id="pending-handover-detail-${drvId}" style="display:none;background:var(--bg);border-top:1px solid var(--brd);max-height:320px;overflow-y:auto">
+        <div style="padding:6px 10px;background:var(--bg2);font-size:10px;color:var(--txt2);font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--brd)">Desglose · ${items.length} carrera${items.length===1?'':'s'}</div>
+        ${itemsHtml}
+      </div>
     </div>`;
   }).join('');
+}
+
+function togglePendingHandoverDetail(drvId) {
+  const el = document.getElementById('pending-handover-detail-' + drvId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 // ── Marca todos los pagos efectivo pendientes de un chofer como entregados ──

@@ -10,7 +10,7 @@
 // IMPORTANTE: bumpear CACHE cada vez que haya un cambio mayor para forzar
 // limpieza de versiones anteriores.
 
-const CACHE = 'flotacontrol-v37';
+const CACHE = 'flotacontrol-v38';
 const PRECACHE_URLS = [
   './index.html',
   './manifest.json',
