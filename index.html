@@ -1018,11 +1018,17 @@ audio{width:100%;height:36px;margin-top:6px}
 
       <div class="sh">Transferencias por verificar <span id="caja-pending-verify-count" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
-        Transferencias en caja pendientes de confirmación con el banco. Lista deslizable.
+        Transferencias en USD/EUR pendientes de confirmación con el banco. Las transferencias en CUP entran directo a caja sin verificación. Lista deslizable.
       </div>
       <div id="caja-pending-verify" class="card" style="max-height:300px;overflow-y:auto;padding:0">
         <div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin transferencias pendientes.</div>
       </div>
+
+      <div class="sh">📊 Entradas a caja por chofer <span id="caja-entradas-cnt" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Auditoría: cuánto contribuyó cada chofer al matrix de caja en este período. Tocá un chofer para ver el detalle.
+      </div>
+      <div id="caja-entradas-chofer"></div>
 
       <div class="sh">Libro de operaciones</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
@@ -6127,57 +6133,77 @@ async function loadCaja() {
   });
 
   // 2) Ingresos por carrera. Modelo:
-  //    Cada trip tiene trip.payments[] con varios pagos (amount, currency,
-  //    cobro, status). Toda plata cobrada para la empresa suma al matrix —
-  //    incluso si el chofer todavía la tiene (pending_handover). La empresa
-  //    es dueña de esa plata aunque físicamente esté con el chofer; el
-  //    card "Pendiente de entrega" muestra qué le toca cobrar a cada chofer.
+  //    A caja solo entra plata que el admin tiene físicamente bajo control.
   //
   //    Estados que SUMAN al matrix:
-  //      - handed_over     (efectivo entregado al admin)
-  //      - verified        (transferencia verificada)
-  //      - pending_handover (efectivo todavía con el chofer — sigue siendo de la empresa)
-  //      - pending_verification (transferencia recibida, falta confirmar)
+  //      - handed_over          (efectivo entregado al admin por el chofer)
+  //      - verified             (transferencia verificada por el admin)
+  //      - pending_verification + currency=CUP (transferencias CUP entran
+  //        directo a caja sin verificación — caso Adriana y similares)
   //
-  //    Estados que NO suman:
-  //      - billetera       (Nave Billetera: pago directo al canal)
+  //    Estados que NO suman al matrix:
+  //      - pending_handover     (efectivo todavía con el chofer)
+  //      - pending_verification + currency≠CUP (USD/EUR pendientes de verificar)
+  //      - billetera            (Nave Billetera: pago directo al canal)
   //
   //    Exclusiones por trip:
   //      - source='nave_billetera' / cobro='billetera'
   //      - source='cinco' + is_credito (Marco crédito: deuda de canal)
   //      - source='wapp'   (Lorenzo siempre crédito)
+  //      - source='socios' (Socios: deuda con socio)
   //      - payment_status='pending' (carrera sin cobrar todavía)
-  const driverPending = {};   // {driverId: {currency: {efectivo, transferencia}}} — informativo
-  const pendingTransfers = []; // transferencias por verificar
+  //
+  //    Trackings paralelos (para auditoría / acción admin):
+  //      - driverPending  → efectivo aún con chofer, agrupado por chofer
+  //      - pendingTransfers → transferencias no-CUP por verificar
+  //      - cajaEntradasPorChofer → entradas reales al matrix por chofer
+  const driverPending = {};
+  const pendingTransfers = [];
+  const cajaEntradasPorChofer = {};
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return;
     if (t.source === 'wapp') return;
-    if (t.source === 'socios') return; // Socios: deuda independiente, no toca caja
+    if (t.source === 'socios') return;
     if (t.payment_status === 'pending') return;
     const pays = getTripPayments(t);
     pays.forEach((p, idx) => {
       if (!p || !p.amount) return;
       if (p.status === 'billetera') return;
-      // Sumar al matrix (la empresa ya es dueña del dinero, esté donde esté)
-      if (p.status === 'handed_over' || p.status === 'verified'
-          || p.status === 'pending_handover' || p.status === 'pending_verification') {
+      const cur = (p.currency || 'CUP').toUpperCase();
+      const cobro = p.cobro || 'efectivo';
+      const drv = t.driverId || '?';
+      const isCupTransfer = (p.status === 'pending_verification' && cur === 'CUP');
+      const entraACaja = (p.status === 'handed_over' || p.status === 'verified' || isCupTransfer);
+      if (entraACaja) {
         aplicarATraza(matriz, p.currency, p.cobro, p.amount);
+        // Auditoría por chofer: registrar la entrada
+        if (!cajaEntradasPorChofer[drv]) cajaEntradasPorChofer[drv] = {
+          name: t.driverName || drv, byCur: {}, items: []
+        };
+        if (!cajaEntradasPorChofer[drv].byCur[cur]) cajaEntradasPorChofer[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
+        cajaEntradasPorChofer[drv].byCur[cur][cobro] = (cajaEntradasPorChofer[drv].byCur[cur][cobro] || 0) + p.amount;
+        cajaEntradasPorChofer[drv].items.push({
+          trip_id: t.trip_id || t.id, source: t.source,
+          date: t.date, time: t.time || '',
+          amount: p.amount, currency: cur, cobro,
+          status: p.status, auto: !!isCupTransfer,
+          handed_over_at: p.handed_over_at || null,
+          verified_at: p.verified_at || null,
+        });
       }
-      // Trackear qué efectivo está aún con el chofer (informativo)
+      // Pendiente de entrega del chofer (efectivo no entregado todavía)
       if (p.status === 'pending_handover') {
-        const drv = t.driverId || '?';
         if (!driverPending[drv]) driverPending[drv] = { name: t.driverName || drv, byCur: {}, notes: [] };
-        const cur = (p.currency || 'CUP').toUpperCase();
         if (!driverPending[drv].byCur[cur]) driverPending[drv].byCur[cur] = { efectivo: 0, transferencia: 0 };
-        driverPending[drv].byCur[cur][p.cobro || 'efectivo'] += p.amount;
+        driverPending[drv].byCur[cur][cobro] += p.amount;
         if (t.admin_note && idx === 0) driverPending[drv].notes.push({
           date: t.date, time: t.time||'', text: t.admin_note,
           source: t.source, amount: t.amount, currency: t.currency
         });
       }
-      // Trackear transferencias por verificar (admin confirma con extracto del banco)
-      if (p.status === 'pending_verification') {
+      // Pendiente de verificar (transferencias USD/EUR que no auto-entran)
+      if (p.status === 'pending_verification' && !isCupTransfer) {
         pendingTransfers.push({
           trip_id: t.trip_id || t.id, driverId: t.driverId, driverName: t.driverName,
           source: t.source,
@@ -6471,6 +6497,9 @@ async function loadCaja() {
   renderCajaPendingHandover(driverPending);
   renderCajaPendingVerify(pendingTransfers);
 
+  // ─── Entradas a caja agrupadas por chofer (auditoría) ───
+  renderCajaEntradasPorChofer(cajaEntradasPorChofer, range);
+
   // ─── Fondo Adriana (anticipos − consumos) ───
   // Pasamos TODAS las trips (no filtradas por rango) para mostrar el saldo total
   renderCajaAdriana(allTrips);
@@ -6580,6 +6609,91 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Auditoría: entradas a caja agrupadas por chofer ──
+// Muestra cuánto contribuyó cada chofer al matrix de caja en el período
+// (handed_over efectivo + verified transferencia + auto CUP transferencia).
+// Cada card es expandible para ver el desglose individual de movimientos.
+function renderCajaEntradasPorChofer(byDriver, range) {
+  const el = $('caja-entradas-chofer');
+  const cnt = $('caja-entradas-cnt');
+  if (!el) return;
+  const drivers = Object.entries(byDriver || {});
+  if (cnt) cnt.textContent = drivers.length ? `(${drivers.length} chofer${drivers.length===1?'':'es'})` : '';
+  if (!drivers.length) {
+    el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin entradas a caja en este período.</div>';
+    return;
+  }
+  const fmt = n => Math.round(n).toLocaleString('es');
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+  // Calcular total USD por chofer para ordenar
+  const enriched = drivers.map(([drvId, d]) => {
+    let totalUsd = 0;
+    Object.entries(d.byCur).forEach(([cur, forms]) => {
+      const sub = (forms.efectivo || 0) + (forms.transferencia || 0);
+      if (cur === 'USD') totalUsd += sub;
+      else if (fxCache) {
+        const v = convertToUsd(sub, cur);
+        if (v) totalUsd += v.usd;
+      }
+    });
+    return { drvId, ...d, totalUsd };
+  });
+  enriched.sort((a,b) => b.totalUsd - a.totalUsd);
+
+  el.innerHTML = enriched.map(d => {
+    const drvId = d.drvId;
+    const linesCur = Object.entries(d.byCur)
+      .filter(([_,f]) => (f.efectivo||0) !== 0 || (f.transferencia||0) !== 0)
+      .map(([cur, f]) => {
+        const parts = [];
+        if (f.efectivo) parts.push(`<span style="color:var(--txt2)">💵 ${fmt(f.efectivo)} ${cur}</span>`);
+        if (f.transferencia) parts.push(`<span style="color:var(--txt2)">📲 ${fmt(f.transferencia)} ${cur}</span>`);
+        return parts.join(' · ');
+      })
+      .join('<br>');
+    const itemsSorted = [...d.items].sort((a,b) =>
+      ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||''))
+    );
+    const itemsHtml = itemsSorted.map(it => {
+      const cobroIcon = it.cobro === 'transferencia' ? '📲' : '💵';
+      const stLabel = it.auto ? '<span style="color:#0EA5E9;font-weight:600">auto</span>'
+                              : it.status === 'handed_over' ? '<span style="color:#16A34A">entregado</span>'
+                              : it.status === 'verified'    ? '<span style="color:#16A34A">verificado</span>'
+                              : it.status;
+      const tag = SRC[it.source] || it.source;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--brd);font-size:11px">
+        <div style="font-size:14px">${cobroIcon}</div>
+        <div style="flex:1;min-width:0;line-height:1.3">
+          <div style="color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><strong>${fmt(it.amount)} ${it.currency}</strong> · ${tag}</div>
+          <div style="color:var(--txt3);font-size:10px">${it.date} · ${it.time||''} · ${stLabel}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleEntradaChofer('${drvId}')" style="cursor:pointer;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg2)">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;color:var(--txt)">${d.name}</div>
+          <div style="font-size:11px;color:var(--txt2);margin-top:2px">${linesCur || '—'}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-size:14px;font-weight:700;color:var(--g)">${fmtUsd(d.totalUsd)}</div>
+          <div style="font-size:10px;color:var(--txt3)">${d.items.length} entrada${d.items.length===1?'':'s'} ▾</div>
+        </div>
+      </div>
+      <div id="entrada-detail-${drvId}" style="display:none;max-height:280px;overflow-y:auto">
+        ${itemsHtml || '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:11px">Sin movimientos.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleEntradaChofer(drvId) {
+  const el = document.getElementById('entrada-detail-' + drvId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 // ── Pendiente de entrega de choferes (efectivo) ──
