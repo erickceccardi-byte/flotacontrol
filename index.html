@@ -773,10 +773,12 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="card" style="padding:10px 12px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select id="det-driver" onchange="loadDetalle()" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--brd);border-radius:8px;background:var(--bg);font-size:13px;font-family:inherit;cursor:pointer"></select>
-          <div style="display:flex;gap:4px;background:var(--bg2);border-radius:8px;padding:3px">
+          <div style="display:flex;gap:3px;background:var(--bg2);border-radius:8px;padding:3px;flex-wrap:wrap">
             <button class="det-period-btn active" data-period="day" onclick="setDetallePeriod('day')">Día</button>
             <button class="det-period-btn" data-period="week" onclick="setDetallePeriod('week')">Semana</button>
             <button class="det-period-btn" data-period="month" onclick="setDetallePeriod('month')">Mes</button>
+            <button class="det-period-btn" data-period="quarter" onclick="setDetallePeriod('quarter')">90d</button>
+            <button class="det-period-btn" data-period="all" onclick="setDetallePeriod('all')">Total</button>
           </div>
         </div>
       </div>
@@ -2675,7 +2677,23 @@ function getDetalleDateRange() {
       filter: t => t && t.date === todayStr_
     };
   }
-  const days = detPeriod === 'week' ? 7 : 30;
+  if (detPeriod === 'all') {
+    // "Total" = histórico completo. Generamos un rango de 2 años hacia
+    // atrás (suficiente para cualquier histórico real) y un filtro
+    // permisivo (sin restricción de fecha).
+    const dates = [];
+    const today = new Date(now); today.setHours(0,0,0,0);
+    for (let i = 0; i < 730; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      dates.push(ymdLocal(d));
+    }
+    return {
+      label: 'Histórico completo',
+      dates,
+      filter: t => !!t && !!t.date, // todo lo que tenga fecha
+    };
+  }
+  const days = detPeriod === 'week' ? 7 : detPeriod === 'quarter' ? 90 : 30;
   const dates = [];
   const today = new Date(now); today.setHours(0,0,0,0);
   for (let i = 0; i < days; i++) {
@@ -2683,7 +2701,9 @@ function getDetalleDateRange() {
     dates.push(ymdLocal(d));
   }
   return {
-    label: detPeriod === 'week' ? 'Últimos 7 días' : 'Últimos 30 días',
+    label: detPeriod === 'week' ? 'Últimos 7 días'
+         : detPeriod === 'quarter' ? 'Últimos 90 días'
+         : 'Últimos 30 días',
     dates,
     filter: t => dates.includes(t.date),
   };
