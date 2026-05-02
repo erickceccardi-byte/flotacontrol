@@ -796,15 +796,16 @@ audio{width:100%;height:36px;margin-top:6px}
 
       <div class="sh">Salario y pagos <span id="det-salary-pct-lbl" style="color:var(--txt3);font-weight:400;font-size:11px">(15% del neto)</span></div>
       <div class="card">
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;font-weight:600;margin-bottom:4px">📊 Acumulado histórico</div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-          <span>Salario generado:</span>
+          <span>Salario generado total:</span>
           <span style="text-align:right">
             <span id="det-salario-usd" style="font-weight:600">—</span>
             <span style="font-size:11px;color:var(--txt3)" id="det-salario-cup"></span>
           </span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
-          <span>Pagado en el período:</span>
+          <span>Pagado total:</span>
           <span style="text-align:right">
             <span id="det-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
             <span style="font-size:11px;color:var(--txt3)" id="det-pagado-cup"></span>
@@ -817,6 +818,9 @@ audio{width:100%;height:36px;margin-top:6px}
             <span style="font-size:11px;color:var(--txt3);font-weight:400" id="det-pendiente-cup"></span>
           </span>
         </div>
+
+        <button onclick="toggleDetalleBreakdown('salario')" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">▾ Ver desglose por carrera</button>
+        <div id="det-salario-breakdown" style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--brd);border-radius:8px;max-height:320px;overflow-y:auto"></div>
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
           <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de salario</div>
@@ -836,22 +840,23 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
 
         <div style="margin-top:12px">
-          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de salario del período</div>
-          <div id="det-pagos-list" style="font-size:12px"></div>
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Historial de pagos de salario</div>
+          <div id="det-pagos-list" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
         </div>
       </div>
 
       <div class="sh">Propinas y pagos</div>
       <div class="card" style="background:#f7faf2;border-color:var(--gbrd)">
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;font-weight:600;margin-bottom:4px">📊 Acumulado histórico</div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
-          <span>Propinas acumuladas:</span>
+          <span>Propinas acumuladas total:</span>
           <span style="text-align:right">
             <span id="det-tip-usd" style="font-weight:600;color:var(--g)">—</span>
             <span style="font-size:11px;color:var(--txt3)" id="det-tip-cup"></span>
           </span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
-          <span>Pagado en el período:</span>
+          <span>Pagado total:</span>
           <span style="text-align:right">
             <span id="det-tip-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
             <span style="font-size:11px;color:var(--txt3)" id="det-tip-pagado-cup"></span>
@@ -864,6 +869,9 @@ audio{width:100%;height:36px;margin-top:6px}
             <span style="font-size:11px;color:var(--txt3);font-weight:400" id="det-tip-pendiente-cup"></span>
           </span>
         </div>
+
+        <button onclick="toggleDetalleBreakdown('propina')" style="background:transparent;border:1px dashed var(--gbrd);color:var(--g);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">▾ Ver desglose por carrera</button>
+        <div id="det-propina-breakdown" style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--gbrd);border-radius:8px;max-height:320px;overflow-y:auto"></div>
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
           <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Registrar pago de propinas</div>
@@ -883,14 +891,15 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
 
         <div style="margin-top:12px">
-          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de propinas del período</div>
-          <div id="det-tip-pagos-list" style="font-size:12px"></div>
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Historial de pagos de propinas</div>
+          <div id="det-tip-pagos-list" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
         </div>
       </div>
 
       <div class="sh">Bono trimestral <span id="det-bonus-pct-lbl" style="color:var(--txt3);font-weight:400;font-size:11px">(5% del neto últimos 90 días)</span></div>
       <div class="card" id="det-bonus-card">
         <div id="det-bonus-status" style="font-size:11px;padding:6px 10px;border-radius:6px;margin-bottom:8px;background:var(--bg3)"></div>
+        <div style="font-size:10px;color:var(--txt3);text-transform:uppercase;font-weight:600;margin-bottom:4px">📊 Últimos 90 días (independiente del período)</div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
           <span>Neto acumulado (90 días):</span>
           <span style="text-align:right">
@@ -906,12 +915,15 @@ audio{width:100%;height:36px;margin-top:6px}
           </span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-top:1px solid var(--brd)">
-          <span>Pagado en el período:</span>
+          <span>Pagado total de bonos:</span>
           <span style="text-align:right">
             <span id="det-bonus-pagado-usd" style="font-weight:600;color:var(--re)">—</span>
             <span style="font-size:11px;color:var(--txt3)" id="det-bonus-pagado-cup"></span>
           </span>
         </div>
+
+        <button onclick="toggleDetalleBreakdown('bono')" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">▾ Ver desglose por carrera</button>
+        <div id="det-bono-breakdown" style="display:none;margin-top:8px;background:var(--bg);border:1px solid var(--brd);border-radius:8px;max-height:320px;overflow-y:auto"></div>
 
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--brd)">
           <div style="font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:6px">Pagar bono trimestral</div>
@@ -931,8 +943,8 @@ audio{width:100%;height:36px;margin-top:6px}
         </div>
 
         <div style="margin-top:12px">
-          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Pagos de bono del período</div>
-          <div id="det-bonus-pagos-list" style="font-size:12px"></div>
+          <div style="font-size:11px;font-weight:500;color:var(--txt2);margin-bottom:4px">Historial de pagos de bono</div>
+          <div id="det-bonus-pagos-list" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
         </div>
       </div>
 
@@ -2709,6 +2721,111 @@ function getDetalleDateRange() {
   };
 }
 
+// ── Auditoría Detalle: desglose carrera por carrera ──
+// Renderiza una lista detallada de cada carrera con su contribución al
+// salario / propina / bono. Para que el admin pueda revisar y detectar
+// errores en el cálculo de cada una individualmente.
+function renderDetalleBreakdown(elId, trips, kind, pct, cupRate) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+  const fmt = n => Math.round(n).toLocaleString('es');
+
+  // Filtros y cálculo de contribución por kind
+  let items = [];
+  let totalUsd = 0;
+  if (kind === 'salario') {
+    // Salario: facturadas (neto * pct%) + socios (bruto * pct%)
+    for (const t of trips) {
+      if (t.payment_status === 'pending') continue;
+      let baseUsd = 0, baseLabel = '';
+      if (t.source === 'socios') {
+        baseUsd = getTripUsd(t, 'amount');
+        baseLabel = 'bruto socio';
+      } else if (
+        !(t.source === 'cinco' && t.is_credito) &&
+        t.source !== 'wapp' &&
+        t.source !== 'socios'
+      ) {
+        baseUsd = getTripUsd(t, 'netAmount');
+        baseLabel = 'neto';
+      } else {
+        continue; // crédito (Marco/Lorenzo) no aporta a salario
+      }
+      const aporteUsd = baseUsd * (pct / 100);
+      totalUsd += aporteUsd;
+      items.push({ t, baseUsd, baseLabel, aporteUsd });
+    }
+  } else if (kind === 'propina') {
+    for (const t of trips) {
+      if (t.payment_status === 'pending') continue;
+      if (t.source === 'cinco' && t.is_credito) continue;
+      if (t.source === 'wapp' || t.source === 'socios') continue;
+      const tipUsd = getTripUsd(t, 'tipAmount');
+      if (!tipUsd) continue;
+      totalUsd += tipUsd;
+      items.push({ t, baseUsd: tipUsd, baseLabel: 'propina', aporteUsd: tipUsd });
+    }
+  } else if (kind === 'bono') {
+    // Bono: 5% del neto de últimos 90 días, excluyendo adriana/socios/credit/pending
+    for (const t of trips) {
+      if (t.payment_status === 'pending') continue;
+      if (t.source === 'adriana') continue;
+      if (t.source === 'socios') continue;
+      if (t.source === 'cinco' && t.is_credito) continue;
+      if (t.source === 'wapp') continue;
+      if (t.source === 'nave_billetera' || t.cobro === 'billetera') {
+        // nave_billetera SI cuenta para neto pero no para bono? Lo incluimos
+        // por consistencia con la regla actual (excluye solo lo de arriba).
+      }
+      const netoUsd = getTripUsd(t, 'netAmount');
+      const aporteUsd = netoUsd * (pct / 100);
+      if (!netoUsd) continue;
+      totalUsd += aporteUsd;
+      items.push({ t, baseUsd: netoUsd, baseLabel: 'neto', aporteUsd });
+    }
+  }
+
+  if (!items.length) {
+    el.innerHTML = '<div style="padding:14px;color:var(--txt3);text-align:center;font-size:11px">Sin carreras que contribuyan.</div>';
+    return;
+  }
+  // Ordenar más reciente primero
+  items.sort((a,b) => ((b.t.date||'')+' '+(b.t.time||'')).localeCompare((a.t.date||'')+' '+(a.t.time||'')));
+  const headerLine = `<div style="padding:6px 10px;background:var(--bg2);border-bottom:1px solid var(--brd);font-size:10px;color:var(--txt2);font-weight:600;display:flex;justify-content:space-between">
+    <span>${items.length} carreras</span>
+    <span>Total: ${fmtUsd(totalUsd)}${cupRate ? ' · ' + fmt(totalUsd * cupRate) + ' CUP' : ''}</span>
+  </div>`;
+  const lines = items.map(({t, baseUsd, baseLabel, aporteUsd}) => {
+    const tag = SRC[t.source] || t.source;
+    const socioTag = (t.source === 'socios' && t.socio) ? (' · ' + (SOCIOS_LIST.find(s=>s.id===t.socio)?.name || t.socio)) : '';
+    const aporteCup = cupRate ? Math.round(aporteUsd * cupRate) : null;
+    const baseInOriginal = `${fmt(t[kind === 'propina' ? 'tipAmount' : (t.source==='socios'?'amount':'netAmount')] || 0)} ${t.currency||'CUP'}`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid var(--brd);font-size:11px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          <span class="badge ${BDGE[t.source]}" style="font-size:9px">${tag}${socioTag}</span>
+          <span style="color:var(--txt2);margin-left:4px">${t.date} ${t.time||''}</span>
+        </div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:2px">
+          ${baseLabel}: ${baseInOriginal} ≈ ${fmtUsd(baseUsd)}${pct !== null ? ' × ' + pct + '%' : ''}
+        </div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-weight:600;color:var(--g)">${fmtUsd(aporteUsd)}</div>
+        ${aporteCup ? `<div style="font-size:10px;color:var(--txt3)">${fmt(aporteCup)} CUP</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = headerLine + lines;
+}
+
+function toggleDetalleBreakdown(kind) {
+  const el = document.getElementById('det-' + kind + '-breakdown');
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 async function loadDetalle() {
   populateDetDriverSelect();
   const sel = $('det-driver');
@@ -2719,29 +2836,33 @@ async function loadDetalle() {
 
   const range = getDetalleDateRange();
 
-  // Traer trips de las fechas relevantes (Firebase si hay red, IndexedDB si no)
-  let allTrips = [];
+  // Traer TODAS las trips del chofer (necesario para salario/propina/bono globales).
+  // El período sólo se usa para los cards de "consolidado USD" del top y la
+  // lista de carreras del bottom.
+  let allTripsAllTime = [];
   if (fbRef && isOnline) {
     try {
-      const promises = range.dates.map(d =>
-        fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({}))
-      );
-      const results = await Promise.all(promises);
-      results.forEach(day => {
-        Object.values(day).forEach(t => { if (t && typeof t === 'object') allTrips.push(t); });
-      });
+      const tSnap = await fbRef.ref('trips').once('value');
+      const days = tSnap.val() || {};
+      Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
+        if (t && typeof t === 'object' && t.driverId === driverId) allTripsAllTime.push(t);
+      }));
     } catch(e) {}
   } else {
-    for (const d of range.dates) {
+    // Sin conexión: leer IDB de los últimos 730 días
+    const today = new Date(); today.setHours(0,0,0,0);
+    for (let i = 0; i < 730; i++) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
       try {
-        const day = await dbGetTripsByDate(d);
-        allTrips = allTrips.concat(day);
+        const day = await dbGetTripsByDate(ymdLocal(d));
+        for (const t of day) {
+          if (t.driverId === driverId) allTripsAllTime.push(t);
+        }
       } catch(e) {}
     }
   }
-
-  // Filtrar por chofer y por la ventana del periodo
-  const trips = allTrips.filter(t => t.driverId === driverId && range.filter(t));
+  // Trips del periodo (para los cards de top y la lista del bottom)
+  const trips = allTripsAllTime.filter(t => range.filter(t));
 
   // Header con info (cuenta TODAS las carreras, incluyendo crédito)
   $('det-info').textContent = `${drv.name} · ${range.label} · ${trips.length} carrera${trips.length===1?'':'s'}`;
@@ -2786,11 +2907,11 @@ async function loadDetalle() {
 
   // ─── Pagos del chofer (split por kind: salario / propina / bono) ───
   // Pagos viejos sin kind se asumen 'salario' por retro-compatibilidad.
+  // SALARIO/PROPINA/BONO son GLOBALES — usan TODOS los pagos, no del período.
   const allPagos = await fetchPagosForDriver(driverId);
-  const pagosPeriodo = allPagos.filter(p => range.dates.includes(p.date));
-  const pagosSalario = pagosPeriodo.filter(p => (p.kind || 'salario') === 'salario');
-  const pagosPropina = pagosPeriodo.filter(p => p.kind === 'propina');
-  const pagosBono    = pagosPeriodo.filter(p => p.kind === 'bono_trimestral');
+  const pagosSalario = allPagos.filter(p => (p.kind || 'salario') === 'salario');
+  const pagosPropina = allPagos.filter(p => p.kind === 'propina');
+  const pagosBono    = allPagos.filter(p => p.kind === 'bono_trimestral');
 
   function sumarPagosUsd(pagos) {
     return pagos.reduce((s, p) => {
@@ -2803,10 +2924,25 @@ async function loadDetalle() {
     }, 0);
   }
 
-  // ── Salario ──
+  // ─── Cálculos GLOBALES (todo el histórico, no dependen del período) ───
+  // Salario y propinas se acumulan por TODAS las carreras del chofer.
+  // El bono trimestral usa solo los últimos 90 días.
+  const allTimeFacturados = allTripsAllTime.filter(t =>
+    !(t.source === 'cinco' && t.is_credito) &&
+    t.source !== 'wapp' &&
+    t.source !== 'socios' &&
+    t.payment_status !== 'pending'
+  );
+  const allTimeSocios = allTripsAllTime.filter(t => t.source === 'socios' && t.payment_status !== 'pending');
+  const allTimeNetoUsd = allTimeFacturados.reduce((s,r) => s + getTripUsd(r, 'netAmount'), 0);
+  const allTimeTipUsd  = allTimeFacturados.reduce((s,r) => s + getTripUsd(r, 'tipAmount'), 0);
+  const allTimeSociosBruto = allTimeSocios.reduce((s,r) => s + getTripUsd(r, 'amount'), 0);
+  const allTimeSalaryBase = allTimeNetoUsd + allTimeSociosBruto;
+
+  // ── Salario (GLOBAL) ──
   const salaryPct = getSalaryPercent();
-  if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${salaryPct}% del neto)`;
-  const salarioUsd = salaryBaseUsd * (salaryPct / 100);
+  if ($('det-salary-pct-lbl')) $('det-salary-pct-lbl').textContent = `(${salaryPct}% del neto · histórico)`;
+  const salarioUsd = allTimeSalaryBase * (salaryPct / 100);
   const salarioCup = (cupRate && salarioUsd) ? Math.round(salarioUsd * cupRate) : null;
   const pagadoSalUsd = sumarPagosUsd(pagosSalario);
   const pagadoSalCup = (cupRate && pagadoSalUsd) ? Math.round(pagadoSalUsd * cupRate) : null;
@@ -2825,14 +2961,15 @@ async function loadDetalle() {
     $('det-pendiente-cup').textContent = (cupRate && (salarioUsd || pagadoSalUsd)) ? `  ·  ${pendienteSalCup >= 0 ? '' : '-'}${Math.abs(pendienteSalCup).toLocaleString('es')} CUP` : '';
   }
 
-  // ── Propinas ──
-  const tipCup = (cupRate && tipUsd) ? Math.round(tipUsd * cupRate) : null;
+  // ── Propinas (GLOBAL) ──
+  const tipGlobalUsd = allTimeTipUsd;
+  const tipCup = (cupRate && tipGlobalUsd) ? Math.round(tipGlobalUsd * cupRate) : null;
   const pagadoTipUsd = sumarPagosUsd(pagosPropina);
   const pagadoTipCup = (cupRate && pagadoTipUsd) ? Math.round(pagadoTipUsd * cupRate) : null;
-  const pendienteTipUsd = tipUsd - pagadoTipUsd;
+  const pendienteTipUsd = tipGlobalUsd - pagadoTipUsd;
   const pendienteTipCup = cupRate ? Math.round(pendienteTipUsd * cupRate) : null;
 
-  if ($('det-tip-usd'))      $('det-tip-usd').textContent      = tipUsd ? fmtUsd(tipUsd) : '—';
+  if ($('det-tip-usd'))      $('det-tip-usd').textContent      = tipGlobalUsd ? fmtUsd(tipGlobalUsd) : '—';
   if ($('det-tip-cup'))      $('det-tip-cup').textContent      = tipCup ? `  ·  ${tipCup.toLocaleString('es')} CUP` : '';
   if ($('det-tip-pagado-usd')) $('det-tip-pagado-usd').textContent = pagadoTipUsd ? '-' + fmtUsd(pagadoTipUsd) : '—';
   if ($('det-tip-pagado-cup')) $('det-tip-pagado-cup').textContent = pagadoTipCup ? `  ·  -${pagadoTipCup.toLocaleString('es')} CUP` : '';
@@ -2849,7 +2986,7 @@ async function loadDetalle() {
     const el = $(elId);
     if (!el) return;
     if (!pagos.length) {
-      el.innerHTML = '<div style="color:var(--txt3);padding:6px 0">Sin pagos en este período.</div>';
+      el.innerHTML = '<div style="color:var(--txt3);padding:6px 0;text-align:center">Sin pagos registrados.</div>';
       return;
     }
     const sorted = [...pagos].sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
@@ -2868,28 +3005,22 @@ async function loadDetalle() {
   renderPagosList('det-tip-pagos-list', pagosPropina);
   renderPagosList('det-bonus-pagos-list', pagosBono);
 
+  // ─── Desglose por carrera (auditoría) ───
+  // Salario: cada carrera contribuye = neto * salaryPct (facturados) o
+  //                                   = bruto * salaryPct (socios)
+  renderDetalleBreakdown('det-salario-breakdown', allTripsAllTime, 'salario', salaryPct, cupRate);
+  renderDetalleBreakdown('det-propina-breakdown', allTripsAllTime, 'propina', null, cupRate);
+  renderDetalleBreakdown('det-bono-breakdown', trips90, 'bono', bonusPct, cupRate);
+
   // ── Bono trimestral (5% del neto USD acumulado en últimos 90 días) ──
   const bonusPct = getBonusPercent();
   if ($('det-bonus-pct-lbl')) $('det-bonus-pct-lbl').textContent = `(${bonusPct}% del neto últimos 90 días)`;
 
-  // Calcular neto de los últimos 90 días, independiente del periodo seleccionado
+  // Calcular neto de los últimos 90 días — usamos allTripsAllTime y filtramos
   const today90 = new Date(); today90.setHours(0,0,0,0);
   const min90 = new Date(today90); min90.setDate(min90.getDate() - 90);
   const min90Str = ymdLocal(min90);
-  let trips90 = [];
-  if (fbRef && isOnline) {
-    try {
-      // Pedimos los últimos 90 días + 1 (para cubrir borde)
-      const dates90 = [];
-      for (let i = 0; i <= 90; i++) {
-        const d = new Date(today90); d.setDate(d.getDate() - i);
-        dates90.push(ymdLocal(d));
-      }
-      const promises = dates90.map(d => fbRef.ref('trips/' + d).once('value').then(s => s.val() || {}).catch(() => ({})));
-      const results = await Promise.all(promises);
-      results.forEach(day => Object.values(day).forEach(t => { if (t && typeof t === 'object' && t.driverId === driverId) trips90.push(t); }));
-    } catch(e) {}
-  }
+  const trips90 = allTripsAllTime.filter(t => t && t.date && t.date >= min90Str);
   // Bono trimestral: excluye Adriana (prepago), Socios (sin bono explícito),
   // y carreras a crédito (Marco crédito + Lorenzo). Pendientes de cobro
   // tampoco aplican. El bono solo se calcula sobre carreras "facturadas".
