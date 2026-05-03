@@ -480,6 +480,9 @@ audio{width:100%;height:36px;margin-top:6px}
     <button onclick="reintentarFx()" style="background:none;border:none;color:var(--am);text-decoration:underline;cursor:pointer;padding:0 4px;font-family:inherit;font-size:11px">Reintentar</button>
   </div>
 
+  <!-- Banner naranja: carreras con synced=0 que no se subieron al servidor -->
+  <div id="drv-unsynced-banner" style="display:none;margin-top:8px"></div>
+
   <!-- Cuerpo: todo cabe en una pantalla, sin scroll -->
   <div class="d-body">
 
@@ -2040,17 +2043,67 @@ async function initFirebase() {
 }
 
 async function syncPending() {
-  if (!fbRef || !isOnline) return;
+  if (!fbRef || !isOnline) return { ok: 0, fail: 0, total: 0 };
   const pending = await dbGetUnsynced();
+  let ok = 0, fail = 0;
   for (const trip of pending) {
     try {
       const stripped = { ...trip };
       if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
       await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
       await dbSaveTrip({ ...trip, synced: 1 });
-    } catch(e) { console.warn('Sync failed for', trip.id, e); }
+      ok++;
+    } catch(e) {
+      console.warn('[Sync] failed for', trip.id, e);
+      fail++;
+    }
   }
+  if (ok > 0) console.log('[Sync] uploaded', ok, 'pending trips');
   updateOnlineUI();
+  // Refrescar UI del chofer para que el badge "local" pase a "sync"
+  if (currentUser && currentUser.role === 'driver' && ok > 0) {
+    try { loadDriverTrips(); } catch(e) {}
+    try { updateUnsyncedBanner(); } catch(e) {}
+  }
+  return { ok, fail, total: pending.length };
+}
+
+// ── Banner de carreras sin subir (chofer) ──
+// Cuando hay carreras con synced=0, muestra una alerta arriba en la
+// pantalla del chofer con botón para forzar sync inmediato.
+async function updateUnsyncedBanner() {
+  const el = $('drv-unsynced-banner');
+  if (!el) return;
+  if (!currentUser || currentUser.role !== 'driver') {
+    el.style.display = 'none';
+    return;
+  }
+  let pending = [];
+  try { pending = await dbGetUnsynced(); } catch(e) { pending = []; }
+  if (!pending.length) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:10px;padding:10px 12px;margin:0 14px 10px;display:flex;align-items:center;gap:10px;font-size:12px">
+      <div style="font-size:18px">⏳</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${pending.length} carrera${pending.length===1?'':'s'} sin subir al servidor</div>
+        <div style="font-size:11px;opacity:0.8">${isOnline ? 'Tocá "Sincronizar" para subirlas ahora' : 'Sin conexión — se subirán cuando vuelva el internet'}</div>
+      </div>
+      <button onclick="forceSyncDriver()" style="background:#92400E;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" ${!isOnline?'disabled style="opacity:0.5"':''}>↑ Sincronizar</button>
+    </div>`;
+}
+
+async function forceSyncDriver() {
+  if (!isOnline) { toast('Sin conexión'); return; }
+  toast('Sincronizando…');
+  const res = await syncPending();
+  if (res.ok > 0 && res.fail === 0) toast(`✓ ${res.ok} carrera${res.ok===1?'':'s'} subida${res.ok===1?'':'s'}`);
+  else if (res.ok > 0 && res.fail > 0) toast(`✓ ${res.ok} subidas · ⚠ ${res.fail} fallaron`);
+  else if (res.ok === 0 && res.fail > 0) toast(`⚠ ${res.fail} carrera${res.fail===1?'':'s'} fallaron al subir`);
+  else if (res.total === 0) toast('Todo está sincronizado');
 }
 
 async function pushTrip(trip) {
@@ -2433,6 +2486,14 @@ function showDriverScreen() {
   updateOnlineUI();
   initShiftUI();
   refreshFxWarn();
+  // Mostrar banner de carreras sin subir + intentar sync en background.
+  updateUnsyncedBanner();
+  if (isOnline) {
+    syncPending().then(r => {
+      updateUnsyncedBanner();
+      if (r && r.ok > 0) loadDriverTrips();
+    }).catch(()=>{});
+  }
   // Si hay red pero aún no hay fxCache, intentar traerla en background
   if (!fxCache && fbRef && isOnline) {
     loadLatestFxRates().then(() => { refreshFxWarn(); loadDriverTrips(); });
@@ -2447,10 +2508,11 @@ function showDriverScreen() {
 // Mantiene la lista del chofer sincronizada con PB cada 45s (los cambios
 // del admin: borrar carrera, editar status, marcar entrega, llegan en
 // menos de 1 minuto sin tener que cerrar y abrir la app).
+// También intenta sincronizar carreras locales sin subir (synced=0).
 let _driverAutoTimer = null;
 function startDriverAutoRefresh() {
   stopDriverAutoRefresh();
-  _driverAutoTimer = setInterval(() => {
+  _driverAutoTimer = setInterval(async () => {
     if (!currentUser || currentUser.role !== 'driver') {
       stopDriverAutoRefresh();
       return;
@@ -2458,9 +2520,13 @@ function startDriverAutoRefresh() {
     if (!isOnline) return;
     // Si está editando una carrera, no refrescar (no romper el modal)
     if ($('modal-edit-trip') && $('modal-edit-trip').classList.contains('show')) return;
-    loadDriverTrips();
+    // Primero intentar subir pendientes (silencioso)
+    try { await syncPending(); } catch(e) {}
+    // Después refrescar UI
+    try { await loadDriverTrips(); } catch(e) {}
+    try { await updateUnsyncedBanner(); } catch(e) {}
     if ($('sheet-hoy') && $('sheet-hoy').classList.contains('show')) {
-      loadDriverPendingAcumulado();
+      try { await loadDriverPendingAcumulado(); } catch(e) {}
     }
   }, 45000);
 }
@@ -3675,10 +3741,19 @@ async function regTrip() {
   if ($('d-marco-tipo')) $('d-marco-tipo').style.display = 'none';
 
   loadDriverTrips();
+  updateUnsyncedBanner();
   // Si el bottom sheet "HOY" está abierto, refrescar también el card de
   // pendiente de entrega (si no, la próxima vez que lo abra se carga).
   if ($('sheet-hoy') && $('sheet-hoy').classList.contains('show')) {
     loadDriverPendingAcumulado();
+  }
+  // Si quedaron carreras sin subir de antes (por mal internet),
+  // intentar sincronizarlas en background ahora que sabemos que el
+  // chofer está activo y probablemente con red.
+  if (isOnline) {
+    syncPending().then(r => {
+      if (r && r.ok > 0) loadDriverTrips();
+    }).catch(()=>{});
   }
 }
 
@@ -5087,16 +5162,18 @@ function openHoySheet() {
   $('sheet-hoy').classList.add('show');
 }
 
-// Botón "⟳" del bottom sheet — fuerza una sincronización inmediata con
-// el servidor (útil cuando el admin acaba de borrar/editar una carrera y
-// el chofer no quiere esperar el auto-refresh de 45s).
+// Botón "⟳" del bottom sheet — fuerza sincronización inmediata. Sube
+// primero las carreras pendientes (synced=0), luego refresca desde PB.
 async function refreshDriverData() {
   if (!isOnline) { toast('Sin conexión'); return; }
   toast('Sincronizando…');
   try {
+    const r = await syncPending();
     await loadDriverTrips();
     await loadDriverPendingAcumulado();
-    toast('✓ Actualizado');
+    await updateUnsyncedBanner();
+    if (r.ok > 0) toast(`✓ ${r.ok} carrera${r.ok===1?'':'s'} subida${r.ok===1?'':'s'}`);
+    else toast('✓ Actualizado');
   } catch(e) {
     toast('Error al sincronizar');
   }
@@ -7689,7 +7766,12 @@ async function init() {
   await initFirebase();
 
   // Online listeners
-  window.addEventListener('online',  () => { isOnline=true;  updateOnlineUI(); syncPending(); loadLatestFxRates(); });
+  window.addEventListener('online',  () => {
+    isOnline=true;
+    updateOnlineUI();
+    syncPending().then(() => { try { updateUnsyncedBanner(); } catch(e){} });
+    loadLatestFxRates();
+  });
   window.addEventListener('offline', () => { isOnline=false; updateOnlineUI(); });
   updateOnlineUI();
 
