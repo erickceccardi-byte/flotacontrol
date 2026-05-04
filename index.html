@@ -1484,12 +1484,24 @@ audio{width:100%;height:36px;margin-top:6px}
       Deuda actual: <strong id="pnc-debe" style="color:var(--re)"></strong>
     </div>
     <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
-      Este pago sale de caja USD efectivo y se atribuye a este chofer. Bajará la deuda de Nave correspondiente a sus carreras.
+      Este pago sale de caja en la moneda y forma que elijas. Podés pagar parcial — la deuda se reduce, lo que falte queda pendiente.
     </div>
     <div style="display:flex;gap:6px;margin-bottom:6px">
-      <input type="number" id="pnc-amount" placeholder="Monto USD" inputmode="decimal" step="0.01" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <input type="number" id="pnc-amount" placeholder="Monto" inputmode="decimal" step="0.01" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <select id="pnc-currency" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="USD">USD</option>
+        <option value="CUP">CUP</option>
+        <option value="EUR">EUR</option>
+      </select>
+      <select id="pnc-cobro" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+        <option value="efectivo">💵 Efec.</option>
+        <option value="transferencia">📲 Transf.</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
       <input type="date" id="pnc-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
     </div>
+    <div id="pnc-equiv" style="font-size:11px;color:var(--txt3);text-align:right;margin-bottom:6px"></div>
     <div class="dmodal-actions">
       <button class="dmodal-btn dmodal-cancel" onclick="closePagoNaveChoferModal()">Cancelar</button>
       <button class="dmodal-btn dmodal-save" onclick="savePagoNaveChofer()">Guardar</button>
@@ -6522,16 +6534,36 @@ async function delAjusteCanal(canal, ajusteId) {
 }
 
 // ── Pago a Nave atribuido a un chofer específico ──
-// Permite saldar la deuda de Nave por chofer (cuando admin paga a Nave
-// por carreras de un chofer particular). El monto sale de caja USD ef.
+// Permite saldar la deuda de Nave por chofer en cualquier moneda + forma.
+// El monto sale de caja en la moneda+forma elegida y se atribuye a este
+// chofer (driverId guardado en el record). Soporta pagos parciales.
 function openPagoNaveChoferModal(driverId, driverName, debeUsd) {
   const m = $('modal-pago-nave-chofer');
   if (!m) return;
   $('pnc-driverId').value = driverId;
   $('pnc-driver-name').textContent = driverName;
   $('pnc-debe').textContent = '$' + (Math.abs(debeUsd) >= 100 ? Math.round(debeUsd).toLocaleString('es') : debeUsd.toFixed(2)) + ' USD';
+  // Default: USD efectivo con monto = deuda completa (admin puede cambiarlo)
   $('pnc-amount').value = debeUsd.toFixed(2);
+  $('pnc-currency').value = 'USD';
+  $('pnc-cobro').value = 'efectivo';
   $('pnc-date').value = todayStr();
+  if ($('pnc-equiv')) $('pnc-equiv').textContent = '';
+  // Listener para mostrar equivalente USD cuando el admin cambia moneda/monto
+  const updEquiv = () => {
+    const amt = parseFloat($('pnc-amount').value);
+    const cur = $('pnc-currency').value;
+    if (!amt || isNaN(amt)) { if ($('pnc-equiv')) $('pnc-equiv').textContent = ''; return; }
+    if (cur === 'USD') { if ($('pnc-equiv')) $('pnc-equiv').textContent = ''; return; }
+    if (fxCache) {
+      const v = convertToUsd(amt, cur);
+      if (v && $('pnc-equiv')) $('pnc-equiv').textContent = `≈ $${v.usd.toFixed(2)} USD`;
+    } else if ($('pnc-equiv')) {
+      $('pnc-equiv').textContent = '⚠ Sin tasa USD — el equivalente no se calcula';
+    }
+  };
+  $('pnc-amount').oninput = updEquiv;
+  $('pnc-currency').onchange = updEquiv;
   m.classList.add('show');
   setTimeout(() => $('pnc-amount')?.focus(), 100);
 }
@@ -6542,22 +6574,35 @@ async function savePagoNaveChofer() {
   const driverId = $('pnc-driverId').value;
   const amt = parseFloat($('pnc-amount').value);
   if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const currency = $('pnc-currency').value || 'USD';
+  const cobro = $('pnc-cobro').value || 'efectivo';
   const date = $('pnc-date').value || todayStr();
+  // Convertir a USD canónico para tracking de la deuda
+  let amountUsd;
+  if (currency === 'USD') amountUsd = amt;
+  else {
+    const v = convertToUsd(amt, currency);
+    if (!v) { toast('Sin tasa USD — agrega una en Config para pagar en CUP/EUR'); return; }
+    amountUsd = v.usd;
+  }
   const pago = {
     id: 'pnv_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
     canal: 'nave',
     driverId,
     amount: amt,
-    currency: 'USD',
-    cobro: 'efectivo',
-    amount_usd: amt,
+    currency,
+    cobro,
+    amount_usd: Math.round(amountUsd * 100) / 100,
+    fx_rate_used: (fxCache && currency !== 'USD') ? (fxCache.cup_por_usd || null) : null,
+    fx_rate_date: (fxCache && currency !== 'USD') ? (fxCache.fecha || '') : '',
     date,
     paid_at: new Date().toISOString(),
     paid_by: currentUser ? currentUser.id : 'admin',
   };
   try {
     await fbRef.ref(`pagos_canal/nave/${pago.id}`).set(pago);
-    toast(`Pago a Nave por ${$('pnc-driver-name').textContent}: $${amt} USD`);
+    const symbol = currency === 'USD' ? '$' : '';
+    toast(`Pago a Nave (${$('pnc-driver-name').textContent}): ${symbol}${amt} ${currency} ${cobro==='transferencia'?'transfer':'efec'}`);
     closePagoNaveChoferModal();
     loadCaja();
   } catch(e) { toast('Error: ' + e.message); }
@@ -6875,7 +6920,13 @@ async function loadCaja() {
   }
   const pagosCanal = pagosCanalAll.filter(range.filter);
   pagosCanal.forEach(pc => {
-    aplicarATraza(matriz, 'USD', 'efectivo', -(pc.amount_usd || 0));
+    // Usar la moneda y forma reales del pago (antes siempre era USD efectivo).
+    // Si el record viejo no tiene currency/cobro, asumimos USD efectivo
+    // por retro-compatibilidad.
+    const cur = pc.currency || 'USD';
+    const cobro = pc.cobro || 'efectivo';
+    const amount = pc.amount || pc.amount_usd || 0;
+    aplicarATraza(matriz, cur, cobro, -amount);
   });
 
   // 5) Movimientos manuales (gastos / ingresos extras)
@@ -7103,12 +7154,20 @@ async function loadCaja() {
       const showAjusteBtn = (canal === 'cinco' || canal === 'wapp');
 
       // Para La Nave: desglose por chofer (cuánto debe la empresa por cada uno)
+      // + historial de pagos atribuidos a cada chofer (expandible)
       let naveByDriverHtml = '';
       if (canal === 'nave') {
         const drivers = Object.entries(naveByDriver)
           .filter(([_, d]) => Math.abs(d.comUsd) > 0.01 || Math.abs(d.pagado) > 0.01);
         if (drivers.length) {
           drivers.sort((a,b) => (b[1].comUsd - b[1].pagado) - (a[1].comUsd - a[1].pagado));
+          // Pagos de Nave atribuidos a chofer (con driverId) — agrupados por chofer
+          const pagosNaveByDriver = {};
+          pagosCanalAll.filter(p => p && p.canal === 'nave' && p.driverId).forEach(p => {
+            if (!pagosNaveByDriver[p.driverId]) pagosNaveByDriver[p.driverId] = [];
+            pagosNaveByDriver[p.driverId].push(p);
+          });
+          const fmt = n => Math.round(n).toLocaleString('es');
           naveByDriverHtml = `
             <div style="margin-top:8px;border:1px solid var(--brd);border-radius:8px;overflow:hidden">
               <div style="padding:6px 10px;background:var(--bg2);font-size:10px;color:var(--txt2);font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--brd)">
@@ -7117,16 +7176,41 @@ async function loadCaja() {
               ${drivers.map(([drvId, d]) => {
                 const debe = d.comUsd - d.pagado;
                 const debeCol = debe > 0.01 ? 'var(--re)' : (debe < -0.01 ? 'var(--g)' : 'var(--txt2)');
-                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--brd);font-size:11px">
-                  <div style="flex:1;min-width:0">
-                    <div style="font-weight:500;color:var(--txt)">${d.name}</div>
-                    <div style="font-size:10px;color:var(--txt3)">comisión ${fmtU(d.comUsd)} · pagado ${fmtU(d.pagado)}</div>
+                const pagos = (pagosNaveByDriver[drvId] || []).sort((a,b) => (b.paid_at||'').localeCompare(a.paid_at||''));
+                const pagosHtml = pagos.length ? `
+                  <div id="navepag-${drvId}" style="display:none;background:var(--bg);border-top:1px solid var(--brd);max-height:200px;overflow-y:auto">
+                    <div style="padding:4px 10px;background:var(--bg2);font-size:9px;color:var(--txt3);font-weight:600;text-transform:uppercase">${pagos.length} pago${pagos.length===1?'':'s'} a Nave por ${d.name}</div>
+                    ${pagos.map(p => {
+                      const amtNum = p.amount || p.amount_usd || 0;
+                      const cur = p.currency || 'USD';
+                      const cobro = p.cobro || 'efectivo';
+                      const usdEq = (cur !== 'USD' && p.amount_usd) ? ` ≈ ${fmtU(p.amount_usd)}` : '';
+                      const dt = p.paid_at || (p.date + 'T12:00:00');
+                      return `<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-top:1px solid var(--brd);font-size:10px">
+                        <div style="flex:1;min-width:0">
+                          <div style="color:var(--txt)">${p.date} · ${dt.slice(11,16)} · ${cobro==='transferencia'?'📲':'💵'} ${cobro}</div>
+                          <div style="font-size:9px;color:var(--txt3)">trip_id ${(p.id||'').slice(-12)}</div>
+                        </div>
+                        <div style="white-space:nowrap;color:var(--re);font-weight:600">−${fmt(amtNum)} ${cur}<span style="color:var(--txt3);font-weight:400">${usdEq}</span></div>
+                        <button onclick="delPagoCanal('nave','${p.id}')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:11px;padding:0 4px">✕</button>
+                      </div>`;
+                    }).join('')}
+                  </div>` : '';
+                const togglePagos = pagos.length ? `<button onclick="document.getElementById('navepag-${drvId}').style.display=document.getElementById('navepag-${drvId}').style.display==='none'?'block':'none'" style="background:none;border:none;color:var(--txt3);cursor:pointer;font-size:11px;padding:0 4px" title="Ver pagos">▾</button>` : '';
+                return `<div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--brd);font-size:11px">
+                    <div style="flex:1;min-width:0">
+                      <div style="font-weight:500;color:var(--txt)">${d.name}</div>
+                      <div style="font-size:10px;color:var(--txt3)">comisión ${fmtU(d.comUsd)} · pagado ${fmtU(d.pagado)}${pagos.length?' ('+pagos.length+' pago'+(pagos.length===1?'':'s')+')':''}</div>
+                    </div>
+                    <div style="text-align:right;white-space:nowrap">
+                      <div style="font-weight:600;color:${debeCol}">${debe < 0 ? '-' : ''}${fmtU(Math.abs(debe))}</div>
+                      <div style="font-size:9px;color:var(--txt3)">${debe > 0.01 ? 'pendiente' : (debe < -0.01 ? 'a favor' : 'al día')}</div>
+                    </div>
+                    ${togglePagos}
+                    ${debe > 0.01 ? `<button onclick="openPagoNaveChoferModal('${drvId}','${d.name.replace(/'/g, "\\'")}', ${debe.toFixed(2)})" style="background:var(--txt);color:#fff;border:none;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">↗ Pagar</button>` : `<button onclick="openPagoNaveChoferModal('${drvId}','${d.name.replace(/'/g, "\\'")}', ${Math.max(0, debe).toFixed(2)})" style="background:var(--bg2);color:var(--txt2);border:1px solid var(--brd);border-radius:5px;padding:5px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" title="Registrar pago igual">+ Pago</button>`}
                   </div>
-                  <div style="text-align:right;white-space:nowrap">
-                    <div style="font-weight:600;color:${debeCol}">${debe < 0 ? '-' : ''}${fmtU(Math.abs(debe))}</div>
-                    <div style="font-size:9px;color:var(--txt3)">${debe > 0.01 ? 'pendiente' : (debe < -0.01 ? 'a favor' : 'al día')}</div>
-                  </div>
-                  ${debe > 0.01 ? `<button onclick="openPagoNaveChoferModal('${drvId}','${d.name.replace(/'/g, "\\'")}', ${debe.toFixed(2)})" style="background:var(--txt);color:#fff;border:none;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">↗ Pagar</button>` : ''}
+                  ${pagosHtml}
                 </div>`;
               }).join('')}
             </div>`;
