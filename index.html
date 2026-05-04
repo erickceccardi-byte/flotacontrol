@@ -1449,6 +1449,54 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: AJUSTE MANUAL DE CANAL ═══════════ -->
+<div id="modal-ajuste-canal" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Ajuste manual del saldo</div>
+    <input type="hidden" id="ajc-canal">
+    <div style="font-size:13px;color:var(--txt2);margin-bottom:6px">
+      Canal: <strong id="ajc-canal-name" style="color:var(--txt)"></strong>
+    </div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:6px;padding:8px">
+      ⚠ Este ajuste calibra el saldo del canal pero <strong>NO afecta caja</strong>. Usá un monto positivo si el canal te debe más, o negativo si te debe menos. Por ejemplo: si el sistema dice "te debe $50" pero en realidad son $40, ingresá <strong>−10</strong>.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="number" id="ajc-amount" placeholder="Monto USD (+ / −)" inputmode="decimal" step="0.01" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <input type="date" id="ajc-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+    </div>
+    <input type="text" id="ajc-note" placeholder="Motivo del ajuste (recomendado)" style="width:100%;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none;margin-bottom:6px">
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeAjusteCanalModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveAjusteCanal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MINI-MODAL: PAGO A NAVE POR CHOFER ═══════════ -->
+<div id="modal-pago-nave-chofer" class="dmodal">
+  <div class="dmodal-card">
+    <div class="dmodal-ttl">Pagar deuda Nave de un chofer</div>
+    <input type="hidden" id="pnc-driverId">
+    <div style="font-size:13px;color:var(--txt2);margin-bottom:6px">
+      Chofer: <strong id="pnc-driver-name" style="color:var(--txt)"></strong>
+    </div>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:8px">
+      Deuda actual: <strong id="pnc-debe" style="color:var(--re)"></strong>
+    </div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Este pago sale de caja USD efectivo y se atribuye a este chofer. Bajará la deuda de Nave correspondiente a sus carreras.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <input type="number" id="pnc-amount" placeholder="Monto USD" inputmode="decimal" step="0.01" style="flex:2;padding:9px 10px;border:1px solid var(--brd);border-radius:6px;font-size:14px;font-family:inherit;outline:none">
+      <input type="date" id="pnc-date" style="flex:1;padding:9px 8px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+    </div>
+    <div class="dmodal-actions">
+      <button class="dmodal-btn dmodal-cancel" onclick="closePagoNaveChoferModal()">Cancelar</button>
+      <button class="dmodal-btn dmodal-save" onclick="savePagoNaveChofer()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: GASTO DEL CHOFER ═══════════ -->
 <div id="modal-gasto" class="dmodal">
   <div class="dmodal-card">
@@ -1845,6 +1893,7 @@ const PB_PATHS = {
   gps_daily:         { coll: 'gps_daily',         keys: ['date',     'driverId'] },
   anticipos_adriana: { coll: 'anticipos_adriana', keys: ['anticipo_id'] },
   pagos_socio:       { coll: 'pagos_socio',       keys: ['pago_id'] },
+  ajustes_canal:     { coll: 'ajustes_canal',     keys: ['canal',    'ajuste_id'] },
   // 'caja/saldo_inicial' es un singleton manejado aparte
 };
 
@@ -6424,6 +6473,96 @@ async function delPagoCanal(canal, pagoId) {
   } catch(e) { toast('Error: ' + e.message); }
 }
 
+// ── Ajuste manual del saldo de un canal (Marco / Lorenzo) ──
+// No afecta caja, solo calibra el balance que muestra la card del canal.
+function openAjusteCanalModal(canal) {
+  const m = $('modal-ajuste-canal');
+  if (!m) return;
+  $('ajc-canal').value = canal;
+  $('ajc-canal-name').textContent = CANAL_NAMES[canal] || canal;
+  $('ajc-amount').value = '';
+  $('ajc-date').value = todayStr();
+  $('ajc-note').value = '';
+  m.classList.add('show');
+  setTimeout(() => $('ajc-amount')?.focus(), 100);
+}
+function closeAjusteCanalModal() { $('modal-ajuste-canal')?.classList.remove('show'); }
+
+async function saveAjusteCanal() {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const canal = $('ajc-canal').value;
+  const amt = parseFloat($('ajc-amount').value);
+  if (isNaN(amt) || amt === 0) { toast('Monto inválido (puede ser positivo o negativo, no cero)'); return; }
+  const note = $('ajc-note').value.trim();
+  const date = $('ajc-date').value || todayStr();
+  const ajuste = {
+    ajuste_id: 'ajc_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    canal,
+    amount_usd: amt,
+    note,
+    date,
+    created_at: new Date().toISOString(),
+    created_by: currentUser ? currentUser.id : 'admin',
+  };
+  try {
+    await fbRef.ref(`ajustes_canal/${canal}/${ajuste.ajuste_id}`).set(ajuste);
+    toast(`Ajuste guardado: ${amt >= 0 ? '+' : ''}$${amt.toFixed(2)} USD`);
+    closeAjusteCanalModal();
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function delAjusteCanal(canal, ajusteId) {
+  if (!confirm('¿Eliminar este ajuste?')) return;
+  try {
+    await fbRef.ref(`ajustes_canal/${canal}/${ajusteId}`).remove();
+    toast('Ajuste eliminado');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+// ── Pago a Nave atribuido a un chofer específico ──
+// Permite saldar la deuda de Nave por chofer (cuando admin paga a Nave
+// por carreras de un chofer particular). El monto sale de caja USD ef.
+function openPagoNaveChoferModal(driverId, driverName, debeUsd) {
+  const m = $('modal-pago-nave-chofer');
+  if (!m) return;
+  $('pnc-driverId').value = driverId;
+  $('pnc-driver-name').textContent = driverName;
+  $('pnc-debe').textContent = '$' + (Math.abs(debeUsd) >= 100 ? Math.round(debeUsd).toLocaleString('es') : debeUsd.toFixed(2)) + ' USD';
+  $('pnc-amount').value = debeUsd.toFixed(2);
+  $('pnc-date').value = todayStr();
+  m.classList.add('show');
+  setTimeout(() => $('pnc-amount')?.focus(), 100);
+}
+function closePagoNaveChoferModal() { $('modal-pago-nave-chofer')?.classList.remove('show'); }
+
+async function savePagoNaveChofer() {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const driverId = $('pnc-driverId').value;
+  const amt = parseFloat($('pnc-amount').value);
+  if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  const date = $('pnc-date').value || todayStr();
+  const pago = {
+    id: 'pnv_' + Date.now() + '_' + Math.random().toString(36).slice(2,5),
+    canal: 'nave',
+    driverId,
+    amount: amt,
+    currency: 'USD',
+    cobro: 'efectivo',
+    amount_usd: amt,
+    date,
+    paid_at: new Date().toISOString(),
+    paid_by: currentUser ? currentUser.id : 'admin',
+  };
+  try {
+    await fbRef.ref(`pagos_canal/nave/${pago.id}`).set(pago);
+    toast(`Pago a Nave por ${$('pnc-driver-name').textContent}: $${amt} USD`);
+    closePagoNaveChoferModal();
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
 // ── Cobros DESDE canal (canal nos paga lo que nos debe) ──
 function openCobroCanalModal(canal) {
   $('cob-canal-name').value = canal;
@@ -6746,13 +6885,18 @@ async function loadCaja() {
   });
 
   // ─── Comisiones acumuladas por canal (USD canónico) ───
-  // Para cada canal mantenemos 4 buckets:
+  // Para cada canal mantenemos buckets:
   //   comisionAcum: comisiones que la empresa le debe al canal (todas sus carreras)
-  //   creditoCons: solo Marco — neto de carreras crédito (Marco le debe a la empresa)
+  //   creditoCons: solo Marco/Lorenzo — neto de carreras crédito (canal le debe a la empresa)
   //   pagado:      lo que la empresa ya le pagó al canal (egreso de caja)
   //   cobrado:     lo que el canal nos pagó (ingreso a caja, solo Marco aplica)
+  //   ajustes:     ajustes manuales del admin para calibrar el saldo
+  //
+  // Para LA NAVE específicamente, también tracking por chofer:
+  //   naveByDriver[driverId] = { name, comUsd, pagado }
   const comisionAcum = { nave: 0, cinco: 0, wapp: 0 };
   const creditoCons  = { nave: 0, cinco: 0, wapp: 0 };
+  const naveByDriver = {}; // {driverId: {name, comUsd, pagado}}
   let billeteraAutoPagado = 0;
   trips.forEach(t => {
     const canal = t.source;
@@ -6762,6 +6906,17 @@ async function loadCaja() {
     comisionAcum[bucket] += commUsd;
     if (canal === 'nave_billetera') {
       billeteraAutoPagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
+    }
+    // Per-chofer breakdown SOLO para La Nave (nave + nave_billetera)
+    if (canal === 'nave' || canal === 'nave_billetera') {
+      const drv = t.driverId || '?';
+      if (!naveByDriver[drv]) naveByDriver[drv] = { name: t.driverName || drv, comUsd: 0, pagado: 0 };
+      naveByDriver[drv].comUsd += commUsd;
+      if (canal === 'nave_billetera') {
+        // En nave_billetera el cliente paga a La Nave directamente, así que
+        // el bruto+tip se considera "ya pagado" de la deuda de ese chofer
+        naveByDriver[drv].pagado += getTripUsd(t, 'amount') + getTripUsd(t, 'tipAmount');
+      }
     }
     // Marco crédito y Lorenzo (siempre crédito): el BRUTO 100% suma a
     // "el canal nos debe". La comisión queda como deuda separada hacia
@@ -6776,8 +6931,33 @@ async function loadCaja() {
   const pagadoCanal = { nave: 0, cinco: 0, wapp: 0 };
   pagosCanal.forEach(pc => {
     if (CANAL_NAMES[pc.canal]) pagadoCanal[pc.canal] += (pc.amount_usd || pc.amount || 0);
+    // Si es pago a Nave con driverId, atribuirlo al chofer
+    if (pc.canal === 'nave' && pc.driverId && naveByDriver[pc.driverId]) {
+      naveByDriver[pc.driverId].pagado += (pc.amount_usd || pc.amount || 0);
+    }
   });
   pagadoCanal.nave += billeteraAutoPagado;
+
+  // Cargar ajustes manuales por canal
+  const ajustesCanal = { nave: [], cinco: [], wapp: [] };
+  if (fbRef && isOnline) {
+    try {
+      const aSnap = await fbRef.ref('ajustes_canal').once('value');
+      const av = aSnap.val() || {};
+      Object.values(av).forEach(byCanal => {
+        Object.values(byCanal || {}).forEach(a => {
+          if (a && typeof a === 'object' && ajustesCanal[a.canal]) {
+            ajustesCanal[a.canal].push(a);
+          }
+        });
+      });
+    } catch(e) {}
+  }
+  // Total de ajustes por canal (suma USD) — todos cuentan, sin filtro de rango
+  const ajustesTotal = { nave: 0, cinco: 0, wapp: 0 };
+  Object.entries(ajustesCanal).forEach(([canal, list]) => {
+    ajustesTotal[canal] = list.reduce((s,a) => s + (a.amount_usd || 0), 0);
+  });
 
   // Cobros desde canal (Marco nos paga) — fetcheamos cobros_canal
   const cobradoCanal = { nave: 0, cinco: 0, wapp: 0 };
@@ -6807,12 +6987,14 @@ async function loadCaja() {
     canalesEl.innerHTML = ['nave','cinco','wapp'].map(canal => {
       const acum = comisionAcum[canal];     // comisiones acumuladas (empresa debe)
       const pag  = pagadoCanal[canal];      // pagado al canal (sale de caja)
-      const cred = creditoCons[canal];      // crédito consumido (Marco debe, solo cinco)
+      const cred = creditoCons[canal];      // crédito consumido (Marco/Lorenzo debe)
       const cob  = cobradoCanal[canal];     // cobrado al canal (entra a caja)
-      const saldo = (cred + cob) - (acum + pag);
+      const adj  = ajustesTotal[canal];     // ajustes manuales (suma USD, +/-)
+      const saldo = (cred + cob + adj) - (acum + pag);
       const cName = CANAL_NAMES[canal];
       const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal);
       const cobrosDeEsteCanal = cobrosCanalDelRange.filter(p => p.canal === canal);
+      const ajustesDeEsteCanal = ajustesCanal[canal] || [];
 
       // Construir lista cronológica deslizable con TODOS los movimientos del canal:
       //   - Comisiones (cada carrera del canal aporta una comisión)
@@ -6872,15 +7054,34 @@ async function loadCaja() {
           delAction: `delCobroCanal('${canal}','${p.id||p.cobro_id}')`
         });
       });
+      // Ajustes manuales (no afectan caja, solo el saldo del canal)
+      ajustesDeEsteCanal.forEach(a => {
+        const dt = a.created_at || (a.date + 'T12:00:00');
+        items.push({
+          kind: 'ajuste',
+          date: a.date, time: dt.slice(11,16),
+          label: `🛠 Ajuste manual${a.note ? ' · ' + a.note : ''}`,
+          sub: 'no afecta caja',
+          usd: Math.abs(a.amount_usd || 0), sign: (a.amount_usd || 0) >= 0 ? '+' : '-',
+          delAction: `delAjusteCanal('${canal}','${a.ajuste_id}')`
+        });
+      });
       // Sort cronológico inverso
       items.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
 
       const itemsHTML = items.length
         ? items.map(it => {
-            const color = it.sign === '+' && (it.kind === 'cobro' || it.kind === 'credito') ? 'var(--g)' :
-                          it.sign === '+' ? 'var(--am)' :   // comisión es deuda con canal (color ámbar)
-                          'var(--re)';
-            const icon = it.kind === 'comision' ? '%' : it.kind === 'credito' ? '📒' : it.kind === 'pago' ? '↗' : '↙';
+            // Para ajustes: signo determina color (verde si suma a favor, rojo si resta)
+            let color;
+            if (it.kind === 'ajuste') color = it.sign === '+' ? 'var(--g)' : 'var(--re)';
+            else if (it.sign === '+' && (it.kind === 'cobro' || it.kind === 'credito')) color = 'var(--g)';
+            else if (it.sign === '+') color = 'var(--am)';   // comisión es deuda con canal
+            else color = 'var(--re)';
+            const icon = it.kind === 'comision' ? '%'
+                       : it.kind === 'credito' ? '📒'
+                       : it.kind === 'pago' ? '↗'
+                       : it.kind === 'ajuste' ? '🛠'
+                       : '↙';
             const delBtn = it.delAction ? `<button onclick="${it.delAction}" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:12px;padding:0 4px;flex-shrink:0">✕</button>` : '';
             return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid var(--brd);font-size:11px">
               <span style="font-size:13px;line-height:1;flex-shrink:0;width:14px;text-align:center">${icon}</span>
@@ -6898,6 +7099,39 @@ async function loadCaja() {
       const saldoLbl = saldo > 0 ? `${cName} nos debe` : (saldo < 0 ? `Le debemos a ${cName}` : 'En cero');
       // Marco y Lorenzo pueden tener carreras crédito que les generan deuda → ambos muestran "Cobrar"
       const showCobrarBtn = (canal === 'cinco' || canal === 'wapp');
+      // Ajuste manual disponible para Marco y Lorenzo
+      const showAjusteBtn = (canal === 'cinco' || canal === 'wapp');
+
+      // Para La Nave: desglose por chofer (cuánto debe la empresa por cada uno)
+      let naveByDriverHtml = '';
+      if (canal === 'nave') {
+        const drivers = Object.entries(naveByDriver)
+          .filter(([_, d]) => Math.abs(d.comUsd) > 0.01 || Math.abs(d.pagado) > 0.01);
+        if (drivers.length) {
+          drivers.sort((a,b) => (b[1].comUsd - b[1].pagado) - (a[1].comUsd - a[1].pagado));
+          naveByDriverHtml = `
+            <div style="margin-top:8px;border:1px solid var(--brd);border-radius:8px;overflow:hidden">
+              <div style="padding:6px 10px;background:var(--bg2);font-size:10px;color:var(--txt2);font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--brd)">
+                Deuda por chofer · Nave (sin nave_billetera auto-pagada)
+              </div>
+              ${drivers.map(([drvId, d]) => {
+                const debe = d.comUsd - d.pagado;
+                const debeCol = debe > 0.01 ? 'var(--re)' : (debe < -0.01 ? 'var(--g)' : 'var(--txt2)');
+                return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-top:1px solid var(--brd);font-size:11px">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:500;color:var(--txt)">${d.name}</div>
+                    <div style="font-size:10px;color:var(--txt3)">comisión ${fmtU(d.comUsd)} · pagado ${fmtU(d.pagado)}</div>
+                  </div>
+                  <div style="text-align:right;white-space:nowrap">
+                    <div style="font-weight:600;color:${debeCol}">${debe < 0 ? '-' : ''}${fmtU(Math.abs(debe))}</div>
+                    <div style="font-size:9px;color:var(--txt3)">${debe > 0.01 ? 'pendiente' : (debe < -0.01 ? 'a favor' : 'al día')}</div>
+                  </div>
+                  ${debe > 0.01 ? `<button onclick="openPagoNaveChoferModal('${drvId}','${d.name.replace(/'/g, "\\'")}', ${debe.toFixed(2)})" style="background:var(--txt);color:#fff;border:none;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">↗ Pagar</button>` : ''}
+                </div>`;
+              }).join('')}
+            </div>`;
+        }
+      }
 
       return `
         <div class="card" style="margin-bottom:10px;padding:10px 12px">
@@ -6909,12 +7143,14 @@ async function loadCaja() {
             <div style="font-size:22px;font-weight:700;color:${saldoCol}">${saldo >= 0 ? '' : '-'}${fmtU(Math.abs(saldo))}</div>
             <div style="font-size:10px;color:var(--txt3);margin-top:2px">${items.length} movimiento${items.length===1?'':'s'} · período actual</div>
           </div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
-            <input type="number" id="pcan-${canal}-amt" placeholder="0" inputmode="decimal" style="flex:1;padding:7px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <input type="number" id="pcan-${canal}-amt" placeholder="0" inputmode="decimal" style="flex:1;min-width:80px;padding:7px 10px;border:1px solid var(--brd);border-radius:6px;font-size:13px;font-family:inherit;outline:none">
             <span style="font-size:11px;color:var(--txt3)">USD ef.</span>
             <button class="btn" onclick="registrarPagoCanal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↗ Pagar</button>
             ${showCobrarBtn ? `<button class="btn btnacc" onclick="openCobroCanalModal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px">↙ Cobrar</button>` : ''}
+            ${showAjusteBtn ? `<button class="btn" onclick="openAjusteCanalModal('${canal}')" style="white-space:nowrap;font-size:12px;padding:6px 10px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D">🛠 Ajuste</button>` : ''}
           </div>
+          ${naveByDriverHtml}
           <div style="margin-top:8px;background:var(--bg);border:1px solid var(--brd);border-radius:8px;max-height:280px;overflow-y:auto;padding:0">
             ${itemsHTML}
           </div>
