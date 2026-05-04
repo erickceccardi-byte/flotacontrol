@@ -1449,6 +1449,21 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
+<!-- ═══════════ MINI-MODAL: CARRERAS SIN SUBIR (chofer) ═══════════ -->
+<div id="modal-unsynced" class="dmodal">
+  <div class="dmodal-card" style="max-width:500px;width:95%">
+    <div class="dmodal-ttl">Carreras locales sin subir <span id="unsynced-count" style="color:var(--txt3);font-size:13px"></span></div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Estas carreras están guardadas en este dispositivo pero todavía no llegaron al servidor. Si ves <strong>duplicados</strong> (carreras idénticas por mal internet) podés borrar las de más. La información que ya está sincronizada en el servidor no se afecta.
+    </div>
+    <div id="unsynced-list" style="background:var(--bg);border:1px solid var(--brd);border-radius:8px;max-height:60vh;overflow-y:auto"></div>
+    <div class="dmodal-actions" style="margin-top:10px">
+      <button class="dmodal-btn dmodal-cancel" onclick="closeUnsyncedModal()">Cerrar</button>
+      <button class="dmodal-btn dmodal-save" onclick="closeUnsyncedModal();forceSyncDriver()">↑ Reintentar sync</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ MINI-MODAL: AJUSTE MANUAL DE CANAL ═══════════ -->
 <div id="modal-ajuste-canal" class="dmodal">
   <div class="dmodal-card">
@@ -2103,10 +2118,13 @@ async function initFirebase() {
   try { await syncPending(); } catch(e) {}
 }
 
+// Errores del último syncPending para diagnostico (visibles en el banner)
+let _lastSyncErrors = [];
 async function syncPending() {
-  if (!fbRef || !isOnline) return { ok: 0, fail: 0, total: 0 };
+  if (!fbRef || !isOnline) return { ok: 0, fail: 0, total: 0, errors: [] };
   const pending = await dbGetUnsynced();
   let ok = 0, fail = 0;
+  const errors = [];
   for (const trip of pending) {
     try {
       const stripped = { ...trip };
@@ -2115,23 +2133,28 @@ async function syncPending() {
       await dbSaveTrip({ ...trip, synced: 1 });
       ok++;
     } catch(e) {
-      console.warn('[Sync] failed for', trip.id, e);
+      const msg = (e && e.message) ? e.message : String(e);
+      console.warn('[Sync] failed for', trip.id, msg, trip);
+      errors.push({ id: trip.id, date: trip.date, time: trip.time, amount: trip.amount, currency: trip.currency, source: trip.source, msg });
       fail++;
     }
   }
+  _lastSyncErrors = errors;
   if (ok > 0) console.log('[Sync] uploaded', ok, 'pending trips');
+  if (fail > 0) console.warn('[Sync] failed', fail, 'errors:', errors);
   updateOnlineUI();
   // Refrescar UI del chofer para que el badge "local" pase a "sync"
-  if (currentUser && currentUser.role === 'driver' && ok > 0) {
-    try { loadDriverTrips(); } catch(e) {}
+  if (currentUser && currentUser.role === 'driver') {
+    if (ok > 0) { try { loadDriverTrips(); } catch(e) {} }
     try { updateUnsyncedBanner(); } catch(e) {}
   }
-  return { ok, fail, total: pending.length };
+  return { ok, fail, total: pending.length, errors };
 }
 
 // ── Banner de carreras sin subir (chofer) ──
 // Cuando hay carreras con synced=0, muestra una alerta arriba en la
-// pantalla del chofer con botón para forzar sync inmediato.
+// pantalla del chofer con botón para forzar sync, ver detalles, o limpiar
+// duplicados/errores.
 async function updateUnsyncedBanner() {
   const el = $('drv-unsynced-banner');
   if (!el) return;
@@ -2146,15 +2169,74 @@ async function updateUnsyncedBanner() {
     return;
   }
   el.style.display = 'block';
+  // Si hubo errores en el último sync, mostrar el primero para diagnóstico
+  let errorLine = '';
+  if (_lastSyncErrors && _lastSyncErrors.length) {
+    const e = _lastSyncErrors[0];
+    errorLine = `<div style="font-size:10px;color:#991B1B;margin-top:4px;background:#FEE2E2;border:1px solid #FCA5A5;padding:4px 6px;border-radius:4px;max-height:60px;overflow-y:auto"><strong>Error:</strong> ${e.msg}</div>`;
+  }
   el.innerHTML = `
-    <div style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:10px;padding:10px 12px;margin:0 14px 10px;display:flex;align-items:center;gap:10px;font-size:12px">
-      <div style="font-size:18px">⏳</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600">${pending.length} carrera${pending.length===1?'':'s'} sin subir al servidor</div>
-        <div style="font-size:11px;opacity:0.8">${isOnline ? 'Tocá "Sincronizar" para subirlas ahora' : 'Sin conexión — se subirán cuando vuelva el internet'}</div>
+    <div style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:10px;padding:10px 12px;margin:0 14px 10px;font-size:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:18px">⏳</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600">${pending.length} carrera${pending.length===1?'':'s'} sin subir al servidor</div>
+          <div style="font-size:11px;opacity:0.8">${isOnline ? 'Tocá "Sincronizar" para reintentar' : 'Sin conexión — se subirán cuando vuelva el internet'}</div>
+        </div>
+        <button onclick="forceSyncDriver()" style="background:#92400E;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" ${!isOnline?'disabled style="opacity:0.5"':''}>↑ Sincronizar</button>
       </div>
-      <button onclick="forceSyncDriver()" style="background:#92400E;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" ${!isOnline?'disabled style="opacity:0.5"':''}>↑ Sincronizar</button>
+      ${errorLine}
+      <button onclick="openUnsyncedModal()" style="background:transparent;border:1px dashed #92400E;color:#92400E;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;margin-top:6px">Ver / limpiar carreras locales</button>
     </div>`;
+}
+
+// ── Modal: lista detallada de carreras con synced=0 ──
+async function openUnsyncedModal() {
+  const m = $('modal-unsynced');
+  if (!m) return;
+  let pending = [];
+  try { pending = await dbGetUnsynced(); } catch(e) { pending = []; }
+  pending.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
+  // Detectar duplicados por contenido (date+time+amount+currency+source+driverId)
+  const seen = {};
+  pending.forEach(t => {
+    const key = `${t.date}|${t.time}|${t.amount}|${t.currency}|${t.source}|${t.driverId}`;
+    seen[key] = (seen[key] || 0) + 1;
+    t._dupKey = key;
+    t._dupCount = seen[key];
+  });
+  const fmt = n => Math.round(n).toLocaleString('es');
+  const list = pending.length ? pending.map(t => {
+    const errMatch = (_lastSyncErrors || []).find(e => e.id === t.id);
+    const errLine = errMatch ? `<div style="font-size:10px;color:#991B1B;margin-top:2px"><strong>Error:</strong> ${errMatch.msg}</div>` : '';
+    const dupBadge = t._dupCount > 1 ? `<span style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:600;margin-left:4px">duplicado #${t._dupCount}</span>` : '';
+    return `<div style="display:flex;align-items:start;gap:8px;padding:8px 10px;border-top:1px solid var(--brd);font-size:11px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;color:var(--txt)">
+          <span class="badge ${BDGE[t.source]}" style="font-size:9px">${SRC[t.source]||t.source}</span>
+          ${dupBadge}
+        </div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:2px">${t.date} ${t.time||''} · ${fmt(t.amount)} ${t.currency||'CUP'} · ${t.cobro||'?'}</div>
+        <div style="font-size:9px;color:var(--txt3);margin-top:1px">id ${(t.id||'').slice(-12)}</div>
+        ${errLine}
+      </div>
+      <button onclick="deleteLocalTrip('${t.id}')" style="background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:5px;padding:5px 8px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">🗑 Borrar local</button>
+    </div>`;
+  }).join('') : '<div style="padding:14px;color:var(--txt3);text-align:center;font-size:11px">No hay carreras pendientes.</div>';
+  $('unsynced-list').innerHTML = list;
+  $('unsynced-count').textContent = pending.length;
+  m.classList.add('show');
+}
+function closeUnsyncedModal() { $('modal-unsynced')?.classList.remove('show'); }
+
+async function deleteLocalTrip(tripId) {
+  if (!confirm('¿Borrar esta carrera del dispositivo? No se subirá al servidor. Solo borra si es un duplicado o un error.')) return;
+  try {
+    await dbDeleteTrip(tripId);
+    toast('Carrera local borrada');
+    await openUnsyncedModal();
+    updateUnsyncedBanner();
+  } catch(e) { toast('Error: ' + e.message); }
 }
 
 async function forceSyncDriver() {
@@ -2170,11 +2252,16 @@ async function forceSyncDriver() {
 async function pushTrip(trip) {
   if (!fbRef || !isOnline) return false;
   try {
-    const stripped = { ...trip };
+    // Marcar synced=1 antes de enviar para que el record en PB ya quede correcto
+    const stripped = { ...trip, synced: 1 };
     if (stripped.audioB64 && stripped.audioB64.length > 500000) stripped.audioB64 = '[audio-local-only]';
     await fbRef.ref(`trips/${trip.date}/${trip.id}`).set(stripped);
     return true;
-  } catch(e) { console.warn('pushTrip failed', e); return false; }
+  } catch(e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    console.warn('[pushTrip] failed for', trip.id, msg, trip);
+    return false;
+  }
 }
 
 // ════════════════════════════════════════
@@ -3582,7 +3669,16 @@ function updComLabels() {
   if ($('lbl-wapp'))  $('lbl-wapp').textContent  = 'USD transfer · ' + (typeof c.wapp === 'number' ? c.wapp : 0) + '%';
 }
 
+// Lock para prevenir doble-click + cache de últimas registraciones
+let _regTripInFlight = false;
+const _recentRegTrips = {}; // contentKey → timestamp ms
+const RECENT_REG_WINDOW_MS = 60000; // 1 minuto
+
 async function regTrip() {
+  if (_regTripInFlight) {
+    toast('Ya estamos procesando — esperá un momento');
+    return;
+  }
   if (!currentUser || currentUser.role !== 'driver' || !currentUser.id) {
     toast('⚠️ Sesión inválida - vuelve a iniciar sesión');
     return;
@@ -3590,6 +3686,35 @@ async function regTrip() {
   if (!selCan) { toast('Selecciona el canal'); return; }
   const amt = parseFloat($('f-amt').value);
   if (!amt || amt <= 0) { toast('Ingresa el monto de la carrera'); return; }
+  // Anti-duplicado: si el chofer registró una carrera con la misma firma
+  // de contenido en los últimos 60s, pedir confirmación.
+  const currencyChk = document.getElementById('f-currency')?.value || 'CUP';
+  const contentKey = `${currentUser.id}|${selCan}|${amt}|${currencyChk}|${selCobroType||'?'}`;
+  const now = Date.now();
+  const lastTime = _recentRegTrips[contentKey];
+  if (lastTime && (now - lastTime) < RECENT_REG_WINDOW_MS) {
+    const secs = Math.round((now - lastTime) / 1000);
+    if (!confirm(`Ya registraste una carrera idéntica hace ${secs}s (${selCan} · ${amt} ${currencyChk}). ¿Crear otra de todos modos?\n\nSi tu internet estaba lento y solo querés asegurar que se subió, tocá "Cancelar".`)) {
+      return;
+    }
+  }
+  _recentRegTrips[contentKey] = now;
+  _regTripInFlight = true;
+  // Deshabilitar el botón mientras procesa (evita doble-click)
+  const regBtn = document.querySelector('.d-register');
+  if (regBtn) { regBtn.disabled = true; regBtn.style.opacity = '0.55'; regBtn.style.pointerEvents = 'none'; }
+  try {
+    return await _regTripImpl(amt);
+  } finally {
+    _regTripInFlight = false;
+    if (regBtn) {
+      // Espera 1.5s antes de re-habilitar para evitar doble-tap accidental
+      setTimeout(() => { regBtn.disabled = false; regBtn.style.opacity = ''; regBtn.style.pointerEvents = ''; }, 1500);
+    }
+  }
+}
+
+async function _regTripImpl(amt) {
   // ── Toggle "Pendiente de cobro" — la carrera se registra sin pagos
   // recibidos. Se cobrará después y el admin (o el chofer) la marca cobrada.
   const pendingCollection = !!$('f-pending')?.checked;
@@ -8189,6 +8314,11 @@ function startShiftWithVehicle(vId, vName) {
 // ══════════════════════
 
 async function init() {
+  // ── Restaurar sesión PRIMERO para que el chofer/admin no vea el flash de
+  // login al refrescar el navegador. Es síncrono (lee localStorage). El resto
+  // de la inicialización (DB, fbRef, etc.) corre después en paralelo.
+  tryRestoreSession();
+
   // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -8233,10 +8363,12 @@ async function init() {
   // Limpiezas silenciosas: drivers duplicados + URL Traccar vieja
   cleanupDuplicateDrivers();
   migrateTraccarUrl();
-
-  // Restaurar sesión guardada (no pide login si ya estaba logueado).
-  // Si no hay sesión, queda en la pantalla inicial (login).
-  tryRestoreSession();
+  // (tryRestoreSession ya se llamó al inicio de init para evitar el flash
+  //  del login screen al refrescar)
+  // Si el chofer está logueado, refrescar banner de pendientes de subir
+  if (currentUser && currentUser.role === 'driver') {
+    try { updateUnsyncedBanner(); } catch(e) {}
+  }
 }
 
 
