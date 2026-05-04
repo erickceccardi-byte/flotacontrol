@@ -7036,12 +7036,19 @@ async function loadCaja() {
   if (canalesEl) {
     const fmtU = n => '$' + (n >= 100 ? Math.round(n).toLocaleString('es') : n.toFixed(2));
     canalesEl.innerHTML = ['nave','cinco','wapp'].map(canal => {
-      const acum = comisionAcum[canal];     // comisiones acumuladas (empresa debe)
-      const pag  = pagadoCanal[canal];      // pagado al canal (sale de caja)
-      const cred = creditoCons[canal];      // crédito consumido (Marco/Lorenzo debe)
-      const cob  = cobradoCanal[canal];     // cobrado al canal (entra a caja)
+      const acum = comisionAcum[canal];     // comisiones acumuladas (empresa debe al canal)
+      const pag  = pagadoCanal[canal];      // pagado al canal (REDUCE deuda con canal)
+      const cred = creditoCons[canal];      // crédito consumido (Marco/Lorenzo nos debe)
+      const cob  = cobradoCanal[canal];     // cobrado al canal (canal nos pagó)
       const adj  = ajustesTotal[canal];     // ajustes manuales (suma USD, +/-)
-      const saldo = (cred + cob + adj) - (acum + pag);
+      // Saldo: positivo = canal nos debe, negativo = le debemos al canal.
+      // Lo que NOS ACERCA al saldo positivo: cred (canal nos debe), cob
+      // (canal nos pagó), adj (ajustes), pag (pagamos a canal — reduce
+      // nuestra deuda). Lo que NOS ALEJA: acum (comisión que debemos al canal).
+      // Caso billetera Nave: cliente paga 100 a Nave, Nave se queda 20 comisión
+      // y nos acredita 80 al fondo → comisionAcum += 20, billeteraAutoPagado
+      // += 100 (full cliente payment) → saldo = 100 - 20 = +80 ✓ Nave nos debe 80.
+      const saldo = cred + cob + adj + pag - acum;
       const cName = CANAL_NAMES[canal];
       const pagosDeEsteCanal = pagosCanal.filter(p => p.canal === canal);
       const cobrosDeEsteCanal = cobrosCanalDelRange.filter(p => p.canal === canal);
