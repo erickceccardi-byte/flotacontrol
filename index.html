@@ -7592,6 +7592,11 @@ function renderCajaPendingHandover(byDriver) {
       </div>`;
     }).join('') : '<div style="padding:10px;color:var(--txt3);text-align:center;font-size:11px">Sin detalles.</div>';
 
+    // Rango por defecto: desde la carrera más vieja hasta hoy
+    const sortedItems = [...items].sort((a,b) => (a.date||'').localeCompare(b.date||''));
+    const defaultFrom = sortedItems.length ? sortedItems[0].date : todayStr();
+    const defaultTo   = todayStr();
+
     return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden${notesArr.length ? ';border-color:var(--ambrd);border-width:2px' : ''}">
       <div style="padding:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -7602,6 +7607,15 @@ function renderCajaPendingHandover(byDriver) {
         ${notesBlock}
         <button onclick="togglePendingHandoverDetail('${drvId}')" style="background:transparent;border:1px dashed var(--brd);color:var(--txt2);padding:6px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;width:100%;margin-top:8px">▾ Ver desglose por carrera (${items.length})</button>
         <button class="btn btnacc" style="margin-top:8px;width:100%" onclick="markDriverHandover('${drvId}')">Recibí entrega completa de ${d.name}</button>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--brd)">
+          <div style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;margin-bottom:6px">Recibir por período</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="phr-${drvId}-from" value="${defaultFrom}" style="flex:1;min-width:110px;padding:7px 8px;border:1px solid var(--brd);border-radius:6px;font-size:12px;font-family:inherit">
+            <span style="font-size:11px;color:var(--txt3)">→</span>
+            <input type="date" id="phr-${drvId}-to" value="${defaultTo}" style="flex:1;min-width:110px;padding:7px 8px;border:1px solid var(--brd);border-radius:6px;font-size:12px;font-family:inherit">
+            <button onclick="markDriverHandoverRange('${drvId}','${d.name.replace(/'/g, "\\'")}')" style="background:var(--g);color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">✓ Recibir período</button>
+          </div>
+        </div>
       </div>
       <div id="pending-handover-detail-${drvId}" style="display:none;background:var(--bg);border-top:1px solid var(--brd);max-height:320px;overflow-y:auto">
         <div style="padding:6px 10px;background:var(--bg2);font-size:10px;color:var(--txt2);font-weight:600;text-transform:uppercase;border-bottom:1px solid var(--brd)">Desglose · ${items.length} carrera${items.length===1?'':'s'}</div>
@@ -7615,6 +7629,114 @@ function togglePendingHandoverDetail(drvId) {
   const el = document.getElementById('pending-handover-detail-' + drvId);
   if (!el) return;
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+// ── Marcar como entregadas todas las carreras pending_handover de un
+// chofer dentro de un rango de fechas (entrega parcial por período) ──
+async function markDriverHandoverRange(driverId, driverName) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  const fromStr = $(`phr-${driverId}-from`)?.value;
+  const toStr   = $(`phr-${driverId}-to`)?.value;
+  if (!fromStr || !toStr) { toast('Seleccioná fechas desde y hasta'); return; }
+  if (fromStr > toStr) { toast('La fecha "desde" no puede ser mayor que "hasta"'); return; }
+
+  // Mostrar resumen previo: cuántas carreras y qué montos
+  let pending = [];
+  try {
+    const tSnap = await fbRef.ref('trips').once('value');
+    const days = tSnap.val() || {};
+    for (const [date, trips] of Object.entries(days)) {
+      if (date < fromStr || date > toStr) continue;
+      for (const [tid, t] of Object.entries(trips || {})) {
+        if (!t || typeof t !== 'object' || t.driverId !== driverId) continue;
+        if (t.payment_status === 'pending') continue;
+        if (t.source === 'nave_billetera' || t.cobro === 'billetera') continue;
+        if (t.source === 'cinco' && t.is_credito) continue;
+        if (t.source === 'wapp' || t.source === 'socios') continue;
+        const pays = (Array.isArray(t.payments) && t.payments.length) ? t.payments : null;
+        if (pays) {
+          if (pays.some(p => p && p.status === 'pending_handover')) {
+            pending.push({ tid, date, t });
+          }
+        } else if (t.amount && (t.cobro === 'efectivo' || !t.cobro)) {
+          // Legacy: sin payments[] poblado, pero efectivo
+          pending.push({ tid, date, t });
+        }
+      }
+    }
+  } catch(e) { toast('Error leyendo carreras: ' + e.message); return; }
+
+  if (!pending.length) {
+    toast(`Sin carreras pending_handover de ${driverName} entre ${fromStr} y ${toStr}`);
+    return;
+  }
+
+  // Sumar montos por moneda para el resumen del confirm
+  const totals = {};
+  pending.forEach(({t}) => {
+    const pays = (Array.isArray(t.payments) && t.payments.length) ? t.payments : [{ amount: t.amount, currency: t.currency || 'CUP', cobro: 'efectivo', status: 'pending_handover' }];
+    pays.forEach(p => {
+      if (p && p.status === 'pending_handover') {
+        const c = (p.currency || 'CUP').toUpperCase();
+        totals[c] = (totals[c] || 0) + (p.amount || 0);
+      }
+    });
+  });
+  const summary = Object.entries(totals)
+    .map(([c, a]) => Math.round(a).toLocaleString('es') + ' ' + c)
+    .join(' · ');
+
+  const confirmMsg = `Marcar ${pending.length} carrera${pending.length===1?'':'s'} de ${driverName} entre ${fromStr} y ${toStr} como entregadas?\n\n${summary}\n\nEsto pasará el efectivo a caja.`;
+  if (!confirm(confirmMsg)) return;
+
+  // Aplicar handover a cada trip
+  const nowIso = new Date().toISOString();
+  let updated = 0;
+  for (const {tid, date, t} of pending) {
+    try {
+      let newPays;
+      let changed = false;
+      if (Array.isArray(t.payments) && t.payments.length) {
+        newPays = t.payments.map(p => {
+          if (p && p.status === 'pending_handover') {
+            changed = true;
+            return { ...p, status: 'handed_over', handed_over_at: nowIso };
+          }
+          return p;
+        });
+      } else if (t.amount && (t.cobro === 'efectivo' || !t.cobro)) {
+        changed = true;
+        newPays = [{
+          amount: t.amount, currency: t.currency || 'CUP', cobro: 'efectivo',
+          status: 'handed_over',
+          paid_at: t.date + 'T' + (t.time || '00:00') + ':00',
+          handed_over_at: nowIso
+        }];
+      }
+      if (changed) {
+        await fbRef.ref(`trips/${date}/${tid}`).update({ payments: newPays });
+        updated++;
+      }
+    } catch(e) { console.warn('handover range fail', tid, e); }
+  }
+  // Crear registro de entrega para audit
+  try {
+    const entrega = {
+      entrega_id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      driverId, date: todayStr(),
+      received_at: nowIso,
+      received_by: currentUser ? currentUser.id : 'admin',
+      trip_ids: pending.map(p => p.tid),
+      total_usd: 0,
+      breakdown: totals,
+      gastos_count: 0, gastos_usd: 0,
+      note: `Entrega por período: ${fromStr} → ${toStr}`,
+    };
+    await fbRef.ref(`entregas/${entrega.entrega_id}`).set(entrega);
+  } catch(e) {}
+
+  toast(`✓ ${updated} carrera${updated===1?'':'s'} de ${driverName} marcada${updated===1?'':'s'} entregada${updated===1?'':'s'}`);
+  loadCaja();
 }
 
 // ── Marca todos los pagos efectivo pendientes de un chofer como entregados ──
