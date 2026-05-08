@@ -1044,6 +1044,14 @@ audio{width:100%;height:36px;margin-top:6px}
         <div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin transferencias pendientes.</div>
       </div>
 
+      <div class="sh">💱 Transferencias USD / EUR · clasificación <span id="caja-transfers-classify-cnt" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Cada transferencia USD/EUR debe marcarse como:<br>
+        • <strong>🏦 Banco Cuba</strong> — entra a caja normal pero no genera bono trimestral del chofer (USD restringido).<br>
+        • <strong>👤 Erick / Antonio</strong> — sale de caja y se suma al saldo del socio (USD que ese socio ahora le debe a la empresa).
+      </div>
+      <div id="caja-transfers-classify"></div>
+
       <div class="sh">📊 Entradas a caja por chofer <span id="caja-entradas-cnt" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
         Auditoría: cuánto contribuyó cada chofer al matrix de caja en este período. Tocá un chofer para ver el detalle.
@@ -3285,8 +3293,11 @@ async function loadDetalle() {
   const min90Str = ymdLocal(min90);
   const trips90 = allTripsAllTime.filter(t => t && t.date && t.date >= min90Str);
   // Bono trimestral: excluye Adriana (prepago), Socios (sin bono explícito),
-  // y carreras a crédito (Marco crédito + Lorenzo). Pendientes de cobro
-  // tampoco aplican. El bono solo se calcula sobre carreras "facturadas".
+  // carreras a crédito (Marco crédito + Lorenzo) y transferencias USD/EUR
+  // clasificadas como Banco Cuba (USD restringido — no genera bono).
+  // Las transferencias clasificadas a Erick/Antonio también se excluyen
+  // (esos USD son deuda del socio, no plata real disponible para bono).
+  // Pendientes de cobro tampoco aplican.
   const netoBase90 = trips90
     .filter(t => t
       && t.source !== 'adriana'
@@ -3294,6 +3305,7 @@ async function loadDetalle() {
       && !(t.source === 'cinco' && t.is_credito)
       && t.source !== 'wapp'
       && t.payment_status !== 'pending'
+      && !(t.cobro === 'transferencia' && (t.currency === 'USD' || t.currency === 'EUR') && (t.transfer_destino === 'banco_cuba' || t.transfer_destino === 'erick' || t.transfer_destino === 'antonio'))
     )
     .reduce((s, t) => s + getTripUsd(t, 'netAmount'), 0);
   const bonoCalcUsd = netoBase90 * (bonusPct / 100);
@@ -5765,12 +5777,13 @@ async function fetchPagosSocio() {
 }
 
 // Renderiza la sección "Socios" en la pestaña Caja
-async function renderCajaSocios(allTrips) {
+async function renderCajaSocios(allTrips, transferDebts) {
   const el = $('caja-socios');
   if (!el) return;
   const pagos = await fetchPagosSocio();
   const fmt = n => Math.round(n).toLocaleString('es');
   const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+  const xferDebts = transferDebts || {};
 
   el.innerHTML = SOCIOS_LIST.map(socio => {
     // Carreras de este socio (todas las facturadas, sin importar el estado de pago)
@@ -5779,8 +5792,11 @@ async function renderCajaSocios(allTrips) {
     );
     // Pagos del socio (USD canónico)
     const pagosSocio = pagos.filter(p => p && p.socio === socio.id);
-    // Suma del bruto de carreras (deuda inicial del socio en USD)
-    const debeUsd = carreras.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
+    // Deuda inicial: bruto de carreras 'socios' + transferencias USD/EUR
+    // del histórico clasificadas a este socio (Erick/Antonio).
+    const debeCarreras = carreras.reduce((s,t) => s + getTripUsd(t, 'amount'), 0);
+    const debeXfer = (xferDebts[socio.id] || 0);
+    const debeUsd = debeCarreras + debeXfer;
     // Suma de pagos del socio en USD
     const pagadoUsd = pagosSocio.reduce((s,p) => {
       if (typeof p.amount_usd === 'number') return s + p.amount_usd;
@@ -5829,7 +5845,7 @@ async function renderCajaSocios(allTrips) {
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt2);margin-top:4px;padding-top:4px;border-top:1px dashed ${colorTxt}33">
-          <span>Acumulado: <strong>+${fmtUsd(debeUsd)}</strong></span>
+          <span>Acumulado: <strong>+${fmtUsd(debeUsd)}</strong>${debeXfer > 0.01 ? ` <span style="color:var(--txt3)">(carreras ${fmtUsd(debeCarreras)} · transfers USD ${fmtUsd(debeXfer)})</span>` : ''}</span>
           <span>Cobrado: <strong style="color:var(--g)">−${fmtUsd(pagadoUsd)}</strong></span>
         </div>
         <button class="btn btnacc" style="margin-top:8px;width:100%;padding:7px;font-size:12px" onclick="openPagoSocioModal('${socio.id}')">+ Registrar cobro de ${socio.name}</button>
@@ -5841,6 +5857,81 @@ async function renderCajaSocios(allTrips) {
       </div>
     `;
   }).join('');
+}
+
+// ── Render: lista de transferencias USD/EUR para clasificar ──
+// Cada transferencia se puede marcar como Banco Cuba, Erick o Antonio.
+// Las clasificadas como Erick/Antonio salen de caja matrix (suman al
+// saldo del socio). Las Banco Cuba se mantienen en caja pero NO
+// generan bono trimestral del chofer.
+function renderTransfersClassify(allTransfers) {
+  const el = $('caja-transfers-classify');
+  const cnt = $('caja-transfers-classify-cnt');
+  if (!el) return;
+  if (!allTransfers || !allTransfers.length) {
+    if (cnt) cnt.textContent = '';
+    el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin transferencias USD/EUR registradas.</div>';
+    return;
+  }
+  const fmt = n => Math.round(n).toLocaleString('es');
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+  // Sort: sin clasificar primero, luego por fecha desc
+  const sorted = [...allTransfers].sort((a,b) => {
+    const ac = a.transfer_destino || '';
+    const bc = b.transfer_destino || '';
+    if (!ac && bc) return -1;
+    if (ac && !bc) return 1;
+    return ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||''));
+  });
+  // Contadores por destino
+  const counts = { sin: 0, banco_cuba: 0, erick: 0, antonio: 0 };
+  sorted.forEach(t => {
+    const d = t.transfer_destino || '';
+    if (!d) counts.sin++;
+    else if (counts[d] !== undefined) counts[d]++;
+  });
+  if (cnt) cnt.textContent = `(${counts.sin} sin clasificar · ${counts.banco_cuba} banco · ${counts.erick} Erick · ${counts.antonio} Antonio)`;
+
+  el.innerHTML = `
+    <div class="card" style="padding:0;overflow:hidden;max-height:420px;overflow-y:auto">
+      ${sorted.map(t => {
+        const dest = t.transfer_destino || '';
+        let rowBg = '';
+        let destLabel = '';
+        if (dest === 'banco_cuba') { rowBg = 'background:#F3F4F6'; destLabel = '<span style="background:#E5E7EB;color:#374151;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:600">🏦 Banco Cuba</span>'; }
+        else if (dest === 'erick')  { rowBg = 'background:#EEF2FF'; destLabel = '<span style="background:#DBEAFE;color:#1E40AF;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:600">👤 Erick</span>'; }
+        else if (dest === 'antonio'){ rowBg = 'background:#EEF2FF'; destLabel = '<span style="background:#DBEAFE;color:#1E40AF;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:600">👤 Antonio</span>'; }
+        else                         { rowBg = 'background:#FEF3C7'; destLabel = '<span style="background:#FCD34D;color:#92400E;border-radius:4px;padding:2px 6px;font-size:9px;font-weight:600">⚠ sin clasificar</span>'; }
+        const tripId = String(t.trip_id || '').replace(/'/g, "\\'");
+        const dateStr = String(t.date || '').replace(/'/g, "\\'");
+        return `<div style="padding:8px 10px;border-top:1px solid var(--brd);${rowBg}">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px">
+            <span style="font-size:14px">📲</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                <strong>${fmt(t.amount)} ${t.currency}</strong> · ${t.driverName||'?'} · ${SRC[t.source]||t.source}
+              </div>
+              <div style="font-size:10px;color:var(--txt3)">${t.date} ${t.time||''} · ${destLabel}</div>
+            </div>
+            <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
+              <button onclick="setTransferDestino('${tripId}','${dateStr}','banco_cuba')" style="background:${dest==='banco_cuba'?'#374151':'transparent'};color:${dest==='banco_cuba'?'#fff':'#374151'};border:1px solid #9CA3AF;border-radius:4px;padding:4px 6px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" title="Banco Cuba">🏦 Banco</button>
+              <button onclick="setTransferDestino('${tripId}','${dateStr}','erick')" style="background:${dest==='erick'?'#1E40AF':'transparent'};color:${dest==='erick'?'#fff':'#1E40AF'};border:1px solid #93C5FD;border-radius:4px;padding:4px 6px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" title="Socio Erick">👤 Erick</button>
+              <button onclick="setTransferDestino('${tripId}','${dateStr}','antonio')" style="background:${dest==='antonio'?'#1E40AF':'transparent'};color:${dest==='antonio'?'#fff':'#1E40AF'};border:1px solid #93C5FD;border-radius:4px;padding:4px 6px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap" title="Socio Antonio">👤 Antonio</button>
+              ${dest ? `<button onclick="setTransferDestino('${tripId}','${dateStr}','')" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:11px;padding:0 4px" title="Quitar clasificación">✕</button>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function setTransferDestino(tripId, date, destino) {
+  if (!fbRef || !isOnline) { toast('Sin conexión'); return; }
+  try {
+    await fbRef.ref(`trips/${date}/${tripId}`).update({ transfer_destino: destino || null });
+    toast(destino ? `Clasificada como: ${destino}` : 'Clasificación quitada');
+    loadCaja();
+  } catch(e) { toast('Error: ' + e.message); }
 }
 
 // Modal: registrar cobro de un socio
@@ -6963,6 +7054,11 @@ async function loadCaja() {
   const driverPending = {};
   const pendingTransfers = [];
   const cajaEntradasPorChofer = {};
+  // Transferencias USD/EUR clasificadas como socio (Erick / Antonio):
+  // suman a la deuda de ese socio en USD canónico (no entran a caja matrix).
+  const _socioTransferDebts = { erick: 0, antonio: 0 };
+  // Lista de TODAS las transferencias USD/EUR del histórico (para clasificación)
+  const _allUsdEurTransfers = [];
   trips.forEach(t => {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return;
@@ -6978,6 +7074,38 @@ async function loadCaja() {
       const drv = t.driverId || '?';
       const isCupTransfer = (p.status === 'pending_verification' && cur === 'CUP');
       const entraACaja = (p.status === 'handed_over' || p.status === 'verified' || isCupTransfer);
+      // Recopilar TODAS las transferencias USD/EUR para la sección de
+      // clasificación (independientemente de su estado actual)
+      if (cobro === 'transferencia' && (cur === 'USD' || cur === 'EUR')) {
+        _allUsdEurTransfers.push({
+          trip_id: t.trip_id || t.id,
+          date: t.date, time: t.time || '',
+          driverId: t.driverId, driverName: t.driverName,
+          source: t.source,
+          amount: p.amount, currency: cur,
+          status: p.status,
+          payment_index: idx,
+          transfer_destino: t.transfer_destino || '',
+        });
+      }
+      // Transferencia USD/EUR clasificada a socio (Erick / Antonio):
+      // NO entra a caja matrix; se atribuye al socio como deuda.
+      const dest = t.transfer_destino || '';
+      const isSocioTransfer = entraACaja
+        && cobro === 'transferencia'
+        && (cur === 'USD' || cur === 'EUR')
+        && (dest === 'erick' || dest === 'antonio');
+      if (isSocioTransfer) {
+        // Sumar a deuda del socio (en USD canónico)
+        let usdAmount = p.amount;
+        if (cur !== 'USD' && fxCache) {
+          const v = convertToUsd(p.amount, cur);
+          if (v) usdAmount = v.usd;
+        }
+        if (!_socioTransferDebts[dest]) _socioTransferDebts[dest] = 0;
+        _socioTransferDebts[dest] += usdAmount;
+        return; // no entra a caja
+      }
       if (entraACaja) {
         aplicarATraza(matriz, p.currency, p.cobro, p.amount);
         // Auditoría por chofer: registrar la entrada
@@ -7460,6 +7588,9 @@ async function loadCaja() {
   renderCajaPendingHandover(driverPending);
   renderCajaPendingVerify(pendingTransfers);
 
+  // ─── Transferencias USD/EUR · clasificación por destino ───
+  renderTransfersClassify(_allUsdEurTransfers);
+
   // ─── Entradas a caja agrupadas por chofer (auditoría) ───
   renderCajaEntradasPorChofer(cajaEntradasPorChofer, range);
 
@@ -7468,7 +7599,9 @@ async function loadCaja() {
   renderCajaAdriana(allTrips);
 
   // ─── Socios (Erick / Antonio / Adriana) — saldo por cada uno ───
-  renderCajaSocios(allTrips);
+  // Pasamos también las deudas adicionales por transferencias clasificadas
+  // (USD que clientes le transfirieron al socio en lugar de a la empresa).
+  renderCajaSocios(allTrips, _socioTransferDebts);
 
   // ─── Libro de operaciones (todas las entradas y salidas) ───
   // Junta trips + pagos + pagosCanal + movs en una sola lista cronológica.
