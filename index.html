@@ -633,7 +633,7 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div class="d-extras">
         <button class="d-extra-btn" id="rec-btn" onclick="toggleRec()" title="Nota de voz"><span id="rec-icon">🎤</span><span class="d-extra-status" id="rec-status"></span></button>
-        <button class="d-extra-btn" onclick="openDescModal()" title="Más detalles">＋ Más<span class="d-extra-status" id="desc-status"></span></button>
+        <button class="d-extra-btn" onclick="openDescModal()" title="Dejar nota para el admin">📝 Nota<span class="d-extra-status" id="desc-status"></span></button>
         <span class="rec-timer" id="rec-timer"></span>
       </div>
       <audio id="audio-preview" controls style="display:none;width:100%;margin-top:6px"></audio>
@@ -1352,14 +1352,17 @@ audio{width:100%;height:36px;margin-top:6px}
   </div>
 </div>
 
-<!-- ═══════════ MINI-MODAL: DESCRIPCIÓN (+ Más) ═══════════ -->
+<!-- ═══════════ MINI-MODAL: NOTA DEL CHOFER ═══════════ -->
 <div id="modal-desc" class="dmodal">
   <div class="dmodal-card">
-    <div class="dmodal-ttl">Detalles adicionales</div>
-    <textarea class="dmodal-area" id="f-desc-input" rows="4" placeholder="Cliente, observaciones, ruta especial, etc."></textarea>
+    <div class="dmodal-ttl">📝 Nota para el admin</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:8px">
+      Esta nota queda guardada con la carrera y aparece resaltada en la cuenta del admin para que sepa que necesita revisar algo o que tiene info útil.
+    </div>
+    <textarea class="dmodal-area" id="f-desc-input" rows="4" placeholder="Ej: el cliente pagó con un billete grande sin cambio · cliente prometió pagar mañana · carrera con desvío por accidente · etc."></textarea>
     <div class="dmodal-actions">
       <button class="dmodal-btn dmodal-cancel" onclick="closeDescModal()">Cancelar</button>
-      <button class="dmodal-btn dmodal-save" onclick="saveDescModal()">Guardar</button>
+      <button class="dmodal-btn dmodal-save" onclick="saveDescModal()">Guardar nota</button>
     </div>
   </div>
 </div>
@@ -4493,12 +4496,13 @@ function tripHTML(r, showDel) {
         <span class="ti-time">${!showDel ? r.driverName + ' · ' : ''}${r.time}</span>
         ${syncTag}
         ${modBadge}
+        ${r.desc ? `<span class="badge" style="font-size:9px;background:#DBEAFE;color:#1E40AF;border:1px solid #93C5FD;font-weight:600">📝 nota</span>` : ''}
         ${r.vehiculoName ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">🚗 ${r.vehiculoName}</span>` : ''}
         ${r.pasajeros && r.pasajeros > 1 ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">👥 ${r.pasajeros}</span>` : ''}
       </div>
       ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination || '—'}</div>` : ''}
-      ${r.desc ? `<div class="ti-desc">${r.desc}</div>` : ''}
-      ${r.admin_note ? `<div style="margin-top:5px;padding:6px 8px;background:var(--ambg);border-left:3px solid var(--am);border-radius:4px;font-size:11px;color:var(--am);font-weight:500">📝 Admin: ${r.admin_note}</div>` : ''}
+      ${r.desc ? `<div style="margin-top:5px;padding:6px 8px;background:#DBEAFE;border-left:3px solid #1E40AF;border-radius:4px;font-size:11px;color:#1E40AF;font-weight:500">📝 ${r.driverName || 'Chofer'}: ${r.desc}</div>` : ''}
+      ${r.admin_note ? `<div style="margin-top:5px;padding:6px 8px;background:var(--ambg);border-left:3px solid var(--am);border-radius:4px;font-size:11px;color:var(--am);font-weight:500">📌 Admin: ${r.admin_note}</div>` : ''}
       ${audioHTML}
     </div>
     <div class="ti-right">
@@ -7003,12 +7007,19 @@ async function loadCaja() {
           source: t.source,
           amount: p.amount, currency: cur, cobro,
           admin_note: t.admin_note || '',
+          chofer_note: t.desc || '',
           driverName: t.driverName || drv,
           updated: t.updated || '',
         });
         if (t.admin_note && idx === 0) driverPending[drv].notes.push({
           date: t.date, time: t.time||'', text: t.admin_note,
-          source: t.source, amount: t.amount, currency: t.currency
+          source: t.source, amount: t.amount, currency: t.currency,
+          kind: 'admin'
+        });
+        if (t.desc && idx === 0) driverPending[drv].notes.push({
+          date: t.date, time: t.time||'', text: t.desc,
+          source: t.source, amount: t.amount, currency: t.currency,
+          kind: 'chofer'
         });
       }
       // Pendiente de verificar (transferencias USD/EUR que no auto-entran)
@@ -7677,11 +7688,17 @@ function renderCajaPendingHandover(byDriver) {
     const notesBadge = notesArr.length ? `<span style="background:var(--ambg);color:var(--am);border:1px solid var(--ambrd);border-radius:6px;padding:2px 6px;font-size:11px;font-weight:600;margin-left:8px">📝 ${notesArr.length} nota${notesArr.length===1?'':'s'}</span>` : '';
     const notesBlock = notesArr.length
       ? `<div style="margin-top:8px;padding:8px;background:var(--ambg);border:1px solid var(--ambrd);border-radius:6px">
-          <div style="font-size:11px;color:var(--am);font-weight:600;margin-bottom:4px">📝 Aclaraciones antes de cobrar:</div>
-          ${notesArr.map(n => `<div style="font-size:11px;color:var(--txt2);padding:3px 0;border-top:1px dashed var(--ambrd)">
-            <strong>${n.date} ${n.time}</strong> · ${SRC[n.source] || n.source} · ${Math.round(n.amount).toLocaleString('es')} ${n.currency}<br>
-            <em style="color:var(--am)">${n.text}</em>
-          </div>`).join('')}
+          <div style="font-size:11px;color:var(--am);font-weight:600;margin-bottom:4px">📝 Notas antes de cobrar:</div>
+          ${notesArr.map(n => {
+            const isChofer = n.kind === 'chofer';
+            const bg = isChofer ? '#DBEAFE' : 'transparent';
+            const col = isChofer ? '#1E40AF' : 'var(--am)';
+            const label = isChofer ? '📝 Chofer:' : '📌 Admin:';
+            return `<div style="font-size:11px;color:var(--txt2);padding:5px 6px;border-top:1px dashed var(--ambrd);${isChofer?'background:'+bg+';border-radius:4px;margin-top:3px':''}">
+              <strong>${n.date} ${n.time}</strong> · ${SRC[n.source] || n.source} · ${Math.round(n.amount).toLocaleString('es')} ${n.currency}<br>
+              <span style="color:${col};font-weight:600;font-size:10px">${label}</span> <em style="color:${col}">${n.text}</em>
+            </div>`;
+          }).join('')}
         </div>`
       : '';
 
@@ -7690,7 +7707,9 @@ function renderCajaPendingHandover(byDriver) {
     items.sort((a,b) => ((b.date||'')+' '+(b.time||'')).localeCompare((a.date||'')+' '+(a.time||'')));
     const itemsHtml = items.length ? items.map(it => {
       const tag = SRC[it.source] || it.source;
-      const noteLine = it.admin_note ? `<div style="font-size:10px;color:var(--am);margin-top:2px"><em>📝 ${it.admin_note}</em></div>` : '';
+      const adminNoteLine = it.admin_note ? `<div style="font-size:10px;color:var(--am);margin-top:2px"><em>📌 Admin: ${it.admin_note}</em></div>` : '';
+      const choferNoteLine = it.chofer_note ? `<div style="font-size:10px;color:#1E40AF;margin-top:2px;background:#DBEAFE;padding:3px 5px;border-radius:3px"><em>📝 Chofer: ${it.chofer_note}</em></div>` : '';
+      const noteLine = adminNoteLine + choferNoteLine;
       let usdEq = '';
       if (it.currency === 'USD') usdEq = ' ≈ ' + fmtUsd(it.amount);
       else if (fxCache) {
