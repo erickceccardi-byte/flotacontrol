@@ -676,6 +676,7 @@ audio{width:100%;height:36px;margin-top:6px}
       <div class="atab" onclick="showATab('detalle',this)">Detalle</div>
       <div class="atab" onclick="showATab('pendientes',this)">Pendientes</div>
       <div class="atab" onclick="showATab('caja',this)">Caja</div>
+      <div class="atab" onclick="showATab('rendimientos',this)">📈 Rendimientos</div>
       <div class="atab" onclick="showATab('choferes',this)">Choferes</div>
       <div class="atab" onclick="showATab('gps',this)">GPS</div>
       <div class="atab" onclick="showATab('ia',this)">IA</div>
@@ -1058,7 +1059,11 @@ audio{width:100%;height:36px;margin-top:6px}
       </div>
       <div id="caja-entradas-chofer"></div>
 
-      <div class="sh">Libro de operaciones</div>
+      <div class="sh">📒 Libro contable <span id="caja-libro-cnt" style="font-size:11px;color:var(--txt3);font-weight:400"></span></div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
+        Todas las operaciones del período con desglose por moneda × forma. Tocá ✕ para eliminar — todo lo que dependía de esa operación se recalcula automáticamente.
+      </div>
+      <div id="caja-libro-resumen" style="margin-bottom:8px"></div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:6px">
         Todas las entradas y salidas del período en orden cronológico. Lista deslizable.
       </div>
@@ -1186,6 +1191,17 @@ audio{width:100%;height:36px;margin-top:6px}
         <button class="btn" onclick="saveGPSMap()" style="margin-top:10px">Guardar mapeo</button>
       </details>
 
+      <div class="spacer"></div>
+    </div>
+
+    <!-- RENDIMIENTOS — ganancias mensuales en USD canónico -->
+    <div class="otab-pane" id="atp-rendimientos">
+      <div class="sh">📈 Rendimientos mensuales</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:10px">
+        Cada primero de mes muestra las ganancias acumuladas del mes anterior, convertidas a USD usando la tasa actual. <strong>Excluye:</strong> CUP transferencia (Adriana fund / pagos no extraibles) y USD transferencia clasificada como Banco Cuba (USD restringido).<br>
+        <strong>Incluye:</strong> efectivo en CUP / USD / EUR + transferencias clasificadas como socios + EUR/USD transfer sin clasificar (futuros banco/socio).
+      </div>
+      <div id="rendimientos-list"></div>
       <div class="spacer"></div>
     </div>
 
@@ -2708,6 +2724,7 @@ function showATab(name, el) {
   if (name === 'detalle') loadDetalle();
   if (name === 'pendientes') loadPendientes();
   if (name === 'caja') loadCaja();
+  if (name === 'rendimientos') loadRendimientos();
   if (name === 'choferes') renderDriverMgmt();
   if (name === 'gps') initGpsTab();
   if (name === 'config') { loadConfigUI(); refreshFxStatusUI(); loadLatestFxRates().then(refreshFxStatusUI); }
@@ -7611,12 +7628,181 @@ async function loadCaja() {
   await renderCajaCharts(trips, pagos, pagosCanal, movs, range, salaryPct);
 }
 
-// ── Libro de operaciones (entradas y salidas del período) ──
-// Lista cronológica reversa de TODO lo que afecta caja: ingresos por
-// carrera, egresos por pago de salario / propina / canal / movimientos
-// manuales. Renderizado en un div scrolleable.
+// ── Pestaña Rendimientos: ganancias mensuales en USD canónico ──
+// Cada tarjeta muestra un mes con sus ganancias acumuladas convertidas
+// a USD usando la tasa actual. Excluye CUP transferencia (Adriana) y
+// USD transferencia clasificada como Banco Cuba (USD restringido).
+async function loadRendimientos() {
+  const el = $('rendimientos-list');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--txt3);text-align:center">Cargando…</div>';
+
+  // Traer TODAS las trips
+  let allTrips = [];
+  if (fbRef && isOnline) {
+    try {
+      const tSnap = await fbRef.ref('trips').once('value');
+      const days = tSnap.val() || {};
+      Object.values(days).forEach(d => Object.values(d || {}).forEach(t => {
+        if (t && typeof t === 'object') allTrips.push(t);
+      }));
+    } catch(e) {}
+  }
+  // También fetcheamos pagos (egresos: salario/propina/bono)
+  let allPagos = [];
+  if (fbRef && isOnline) {
+    try {
+      const pSnap = await fbRef.ref('pagos').once('value');
+      const drvs = pSnap.val() || {};
+      Object.values(drvs).forEach(d => Object.values(d || {}).forEach(p => {
+        if (p && typeof p === 'object') allPagos.push(p);
+      }));
+    } catch(e) {}
+  }
+  // Pagos a canales (egresos USD)
+  let pagosCanal = [];
+  if (fbRef && isOnline) {
+    try {
+      const snap = await fbRef.ref('pagos_canal').once('value');
+      const v = snap.val() || {};
+      Object.values(v).forEach(byCanal => {
+        Object.values(byCanal || {}).forEach(p => { if (p && typeof p === 'object') pagosCanal.push(p); });
+      });
+    } catch(e) {}
+  }
+  // Movimientos (gastos/ingresos manuales)
+  let movs = [];
+  try { movs = await fetchMovimientos(); } catch(e) { movs = []; }
+
+  // Agrupar por mes (YYYY-MM)
+  const byMonth = {};
+  const addToMonth = (date, key, value) => {
+    if (!date || value === 0) return;
+    const ym = date.slice(0, 7);
+    if (!byMonth[ym]) byMonth[ym] = { ingresoUsd: 0, egresoUsd: 0, byCur: {}, items: [] };
+    byMonth[ym][key] += value;
+  };
+  // Helper: convertir un payment a USD (excluye CUP transfer y USD transfer banco_cuba)
+  const paymentToUsd = (p, t) => {
+    if (!p || !p.amount) return 0;
+    const cur = (p.currency || 'CUP').toUpperCase();
+    const cobro = p.cobro || 'efectivo';
+    // Exclusiones
+    if (cobro === 'transferencia' && cur === 'CUP') return 0;
+    if (cobro === 'transferencia' && (cur === 'USD' || cur === 'EUR') && t.transfer_destino === 'banco_cuba') return 0;
+    // Convertir a USD
+    if (cur === 'USD') return p.amount;
+    if (fxCache) {
+      const v = convertToUsd(p.amount, cur);
+      return v ? v.usd : 0;
+    }
+    return 0;
+  };
+
+  // Ingresos (carreras) — solo paid + payments handed_over/verified/pending_handover/auto-cup
+  allTrips.forEach(t => {
+    if (t.payment_status === 'pending') return;
+    if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
+    if (t.source === 'cinco' && t.is_credito) return;
+    if (t.source === 'wapp') return;
+    if (t.source === 'socios') return;
+    const pays = getTripPayments(t);
+    let monthlyTotal = 0;
+    pays.forEach(p => { monthlyTotal += paymentToUsd(p, t); });
+    if (monthlyTotal) addToMonth(t.date, 'ingresoUsd', monthlyTotal);
+  });
+
+  // Egresos: pagos a choferes
+  allPagos.forEach(p => {
+    if (!p.amount) return;
+    let usd = (typeof p.amount_usd === 'number') ? p.amount_usd : 0;
+    if (!usd) {
+      if ((p.currency||'CUP').toUpperCase() === 'USD') usd = p.amount;
+      else if (fxCache) {
+        const v = convertToUsd(p.amount, p.currency || 'CUP');
+        if (v) usd = v.usd;
+      }
+    }
+    if (usd) addToMonth(p.date, 'egresoUsd', usd);
+  });
+  // Egresos: pagos a canales
+  pagosCanal.forEach(pc => {
+    let usd = pc.amount_usd || 0;
+    if (!usd && pc.amount) {
+      const cur = (pc.currency||'USD').toUpperCase();
+      if (cur === 'USD') usd = pc.amount;
+      else if (fxCache) {
+        const v = convertToUsd(pc.amount, cur);
+        if (v) usd = v.usd;
+      }
+    }
+    if (usd) addToMonth(pc.date, 'egresoUsd', usd);
+  });
+  // Egresos: movimientos manuales (gastos)
+  movs.forEach(m => {
+    if (!m.amount || m.tipo !== 'gasto') return;
+    let usd = m.amount_usd || 0;
+    if (!usd) {
+      if ((m.currency||'CUP').toUpperCase() === 'USD') usd = m.amount;
+      else if (fxCache) {
+        const v = convertToUsd(m.amount, m.currency || 'CUP');
+        if (v) usd = v.usd;
+      }
+    }
+    if (usd) addToMonth(m.date, 'egresoUsd', usd);
+  });
+
+  const months = Object.keys(byMonth).sort().reverse();
+  if (!months.length) {
+    el.innerHTML = '<div style="padding:14px;color:var(--txt3);text-align:center;font-size:13px">Sin datos para mostrar.</div>';
+    return;
+  }
+  const fmtUsd = n => '$' + (Math.abs(n) >= 100 ? Math.round(Math.abs(n)).toLocaleString('es') : Math.abs(n).toFixed(2));
+  const cupRate = fxCache ? (fxCache.cup_por_usd || (fxCache.CUP_a_USD ? Math.round(1/fxCache.CUP_a_USD) : null)) : null;
+  el.innerHTML = months.map(ym => {
+    const m = byMonth[ym];
+    const neto = m.ingresoUsd - m.egresoUsd;
+    const netoCup = cupRate ? Math.round(neto * cupRate) : null;
+    const ingCup = cupRate ? Math.round(m.ingresoUsd * cupRate) : null;
+    const egrCup = cupRate ? Math.round(m.egresoUsd * cupRate) : null;
+    const dt = new Date(ym + '-01T12:00:00');
+    const monthLabel = dt.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+    const monthCap = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+    const netoCol = neto > 0 ? 'var(--g)' : (neto < 0 ? 'var(--re)' : 'var(--txt2)');
+    return `<div class="card" style="margin-bottom:10px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--txt)">${monthCap}</div>
+          <div style="font-size:11px;color:var(--txt3);margin-top:2px">Cierre al primero de ${dt.toLocaleDateString('es', {month:'long'})}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--txt3)">Neto del mes</div>
+          <div style="font-size:24px;font-weight:700;color:${netoCol}">${neto < 0 ? '-' : ''}${fmtUsd(neto)}</div>
+          ${netoCup !== null ? `<div style="font-size:11px;color:var(--txt3)">${(netoCup<0?'-':'')}${Math.abs(netoCup).toLocaleString('es')} CUP</div>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:1px solid var(--brd)">
+        <span style="color:var(--g)">▲ Ingresos: <strong>${fmtUsd(m.ingresoUsd)}</strong>${ingCup !== null ? ` <span style="color:var(--txt3)">· ${ingCup.toLocaleString('es')} CUP</span>` : ''}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:1px solid var(--brd)">
+        <span style="color:var(--re)">▼ Egresos: <strong>−${fmtUsd(m.egresoUsd)}</strong>${egrCup !== null ? ` <span style="color:var(--txt3)">· −${egrCup.toLocaleString('es')} CUP</span>` : ''}</span>
+      </div>
+    </div>`;
+  }).join('') +
+  `<div style="font-size:10px;color:var(--txt3);text-align:center;margin-top:8px;padding:8px;background:var(--bg2);border-radius:6px">
+    💡 Excluido del cálculo: CUP transferencia (Adriana / fondos no retirables) + USD transferencia clasificada como Banco Cuba (USD restringido).
+  </div>`;
+}
+
+// ── Libro contable (entradas y salidas del período) ──
+// Lista cronológica reversa de TODO lo que afecta caja, con botón de
+// eliminar por operación. Al eliminar: el record se borra de PB y los
+// cálculos derivados se recalculan automáticamente al refrescar.
+// Header con desglose por moneda × forma de pago.
 function renderCajaLibro(trips, pagos, pagosCanal, movs) {
   const el = $('caja-libro');
+  const cnt = $('caja-libro-cnt');
+  const resumenEl = $('caja-libro-resumen');
   if (!el) return;
   const ops = [];
 
@@ -7625,6 +7811,7 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
     if (t.source === 'nave_billetera' || t.cobro === 'billetera') return;
     if (t.source === 'cinco' && t.is_credito) return; // Marco crédito: no afecta matriz de caja
     if (t.source === 'wapp') return; // Lorenzo siempre crédito: no afecta caja
+    if (t.source === 'socios') return; // Socios: no afecta caja
     const monto = (t.amount || 0) + (t.tipAmount || 0);
     if (!monto) return;
     ops.push({
@@ -7632,7 +7819,8 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
       date: t.date, time: t.time || '12:00',
       title: `Carrera ${SRC[t.source] || t.source}`,
       sub: `${t.driverName || '?'} · ${t.cobro || '?'}${t.tipAmount ? ' · propina ' + Math.round(t.tipAmount) : ''}`,
-      amount: monto, currency: t.currency || 'CUP', sign: '+',
+      amount: monto, currency: t.currency || 'CUP', cobro: t.cobro || 'efectivo', sign: '+',
+      action: `delTrip('${t.id || t.trip_id}','${t.date}')`,
     });
   });
 
@@ -7647,20 +7835,22 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
       date: p.date, time: (p.paid_at || '').slice(11,16) || '12:00',
       title: `${kindLabel} a ${drvName}`,
       sub: p.cobro || 'efectivo',
-      amount: p.amount, currency: p.currency || 'CUP', sign: '-',
+      amount: p.amount, currency: p.currency || 'CUP', cobro: p.cobro || 'efectivo', sign: '-',
+      action: `delPago('${p.driverId}','${p.id}')`,
     });
   });
 
-  // Egresos: pagos a canales (siempre USD efectivo)
+  // Egresos: pagos a canales (con la moneda y forma reales)
   pagosCanal.forEach(pc => {
-    const monto = pc.amount_usd || pc.amount || 0;
+    const monto = pc.amount || pc.amount_usd || 0;
     if (!monto) return;
     ops.push({
       kind: 'out_canal',
       date: pc.date, time: (pc.paid_at || '').slice(11,16) || '12:00',
       title: `Pago a ${CANAL_NAMES[pc.canal] || pc.canal}`,
-      sub: 'USD efectivo',
-      amount: monto, currency: 'USD', sign: '-',
+      sub: `${pc.cobro || 'efectivo'} ${pc.currency || 'USD'}`,
+      amount: monto, currency: pc.currency || 'USD', cobro: pc.cobro || 'efectivo', sign: '-',
+      action: `delPagoCanal('${pc.canal}','${pc.id}')`,
     });
   });
 
@@ -7674,13 +7864,59 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
       date: m.date, time: (m.created_at || '').slice(11,16) || '12:00',
       title: catName,
       sub: `${m.cobro || '?'}${m.descripcion ? ' · ' + m.descripcion : ''}`,
-      amount: m.amount, currency: m.currency || 'CUP',
+      amount: m.amount, currency: m.currency || 'CUP', cobro: m.cobro || 'efectivo',
       sign: m.tipo === 'gasto' ? '-' : '+',
+      action: `delMovimiento('${m.id}')`,
     });
   });
 
   // Sort cronológico inverso (más reciente primero)
   ops.sort((a,b) => (b.date + ' ' + b.time).localeCompare(a.date + ' ' + a.time));
+
+  // Desglose por moneda × forma (resumen visual del libro)
+  const desglose = {
+    CUP: { efectivo: 0, transferencia: 0 },
+    USD: { efectivo: 0, transferencia: 0 },
+    EUR: { efectivo: 0, transferencia: 0 },
+  };
+  ops.forEach(op => {
+    const cur = (op.currency || 'CUP').toUpperCase();
+    const cob = (op.cobro === 'transferencia') ? 'transferencia' : 'efectivo';
+    if (!desglose[cur]) desglose[cur] = { efectivo: 0, transferencia: 0 };
+    desglose[cur][cob] = (desglose[cur][cob] || 0) + (op.sign === '-' ? -op.amount : op.amount);
+  });
+  if (cnt) cnt.textContent = `(${ops.length} operación${ops.length===1?'':'es'})`;
+  if (resumenEl) {
+    const fmt2 = n => Math.round(n).toLocaleString('es');
+    resumenEl.innerHTML = `<div style="background:var(--bg);border:1px solid var(--brd);border-radius:8px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr style="background:var(--bg2)">
+            <th style="text-align:left;padding:6px 8px;color:var(--txt2);font-weight:600">Moneda</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--txt2);font-weight:600">💵 Efectivo</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--txt2);font-weight:600">📲 Transfer</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--txt2);font-weight:600">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${['CUP','USD','EUR'].map(c => {
+            const e = desglose[c].efectivo || 0;
+            const tr = desglose[c].transferencia || 0;
+            const total = e + tr;
+            const colE = e < 0 ? 'var(--re)' : 'var(--txt)';
+            const colT = tr < 0 ? 'var(--re)' : 'var(--txt)';
+            const colTot = total < 0 ? 'var(--re)' : (total > 0 ? 'var(--g)' : 'var(--txt2)');
+            return `<tr style="border-top:1px solid var(--brd)">
+              <td style="padding:6px 8px;font-weight:600">${c}</td>
+              <td style="padding:6px 8px;text-align:right;color:${colE}">${fmt2(e)}</td>
+              <td style="padding:6px 8px;text-align:right;color:${colT}">${fmt2(tr)}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:700;color:${colTot}">${fmt2(total)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
 
   if (!ops.length) {
     el.innerHTML = '<div style="padding:12px;color:var(--txt3);text-align:center;font-size:12px">Sin operaciones en este período.</div>';
@@ -7694,15 +7930,18 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
                  op.kind === 'out_pago' ? '👤' :
                  op.kind === 'out_canal' ? '📲' :
                  op.kind === 'in_mov' ? '➕' : '➖';
+    const cobroIcon = op.cobro === 'transferencia' ? '📲' : (op.cobro === 'efectivo' ? '💵' : '');
+    const delBtn = op.action ? `<button onclick="${op.action}" style="background:none;border:none;color:var(--re);cursor:pointer;font-size:13px;padding:2px 6px;flex-shrink:0" title="Eliminar — todo lo que dependía se recalcula">✕</button>` : '';
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:1px solid var(--brd)">
-      <div style="font-size:18px;line-height:1">${icon}</div>
+      <div style="font-size:18px;line-height:1;flex-shrink:0">${icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:500;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${op.title}</div>
-        <div style="font-size:10px;color:var(--txt3)">${op.date} · ${op.time} · ${op.sub}</div>
+        <div style="font-size:10px;color:var(--txt3)">${op.date} · ${op.time} · ${cobroIcon} ${op.sub}</div>
       </div>
-      <div style="text-align:right;white-space:nowrap">
+      <div style="text-align:right;white-space:nowrap;flex-shrink:0">
         <div style="font-weight:600;color:${color}">${op.sign}${fmtAmt(op.amount)} ${op.currency}</div>
       </div>
+      ${delBtn}
     </div>`;
   }).join('');
 }
