@@ -4747,12 +4747,26 @@ function tripHTML(r, showDel) {
         // "cobrada el [fecha]" como referencia (sin badge llamativo).
         // Preferimos paid_on_date_local del payment (local, sin timezone bug);
         // fallback a paid_at.slice(0,10) si la carrera es vieja.
+        // DEFENSA: 23 carreras viejas (migración Firebase→PB del 2-may-2026)
+        // tienen paid_at sembrado con la fecha de migración, no con la real.
+        // Si la diferencia entre paid_at y date es > 1 día Y NO hay
+        // paid_on_date_local explícito (que se setea a partir del Lote 36),
+        // descartamos paid_at como fuente confiable y mostramos date.
         const pays = (r.payments && r.payments.length) ? r.payments : null;
         if (!pays) return '';
         const main = pays.find(p => p && !p.is_tip) || pays[0];
-        const paidDate = (main && main.paid_on_date_local)
-          ? main.paid_on_date_local
-          : (main && main.paid_at ? main.paid_at.slice(0,10) : '');
+        let paidDate = (main && main.paid_on_date_local) || '';
+        if (!paidDate && main && main.paid_at) {
+          const candidato = main.paid_at.slice(0,10);
+          if (r.date) {
+            const dDate = new Date(r.date + 'T00:00:00');
+            const dPaid = new Date(candidato + 'T00:00:00');
+            const deltaDays = Math.abs((dPaid - dDate) / (1000*60*60*24));
+            // Si hay desfase >1 día sin paid_on_date_local explícito, no
+            // confiamos en paid_at — probablemente record migrado.
+            paidDate = (deltaDays <= 1) ? candidato : '';
+          } else paidDate = candidato;
+        }
         if (paidDate && r.date && paidDate !== r.date) {
           return `<div style="font-size:11px;color:var(--txt3);margin-top:3px">💰 cobrada el ${paidDate}</div>`;
         }
@@ -8353,12 +8367,18 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
     if (!monto) return;
     // Si la carrera fue pendiente y se cobró en otra fecha, lo agregamos al
     // subtítulo como referencia (display only — el período sigue usando t.date).
-    // Preferimos paid_on_date_local del payment (local, sin riesgo de timezone).
+    // Defensa: descarto paid_at si está desfasado >1 día y no hay
+    // paid_on_date_local — record migrado con paid_at incorrecto.
     const pays = (t.payments && t.payments.length) ? t.payments : null;
     const main = pays ? (pays.find(p => p && !p.is_tip) || pays[0]) : null;
-    const paidDate = (main && main.paid_on_date_local)
-      ? main.paid_on_date_local
-      : (main && main.paid_at ? main.paid_at.slice(0,10) : '');
+    let paidDate = (main && main.paid_on_date_local) || '';
+    if (!paidDate && main && main.paid_at) {
+      const candidato = main.paid_at.slice(0,10);
+      if (t.date) {
+        const deltaDays = Math.abs((new Date(candidato+'T00:00:00') - new Date(t.date+'T00:00:00')) / (1000*60*60*24));
+        paidDate = (deltaDays <= 1) ? candidato : '';
+      } else paidDate = candidato;
+    }
     const subExtra = (paidDate && paidDate !== t.date) ? ` · cobrada ${paidDate}` : '';
     ops.push({
       kind: 'in_trip',
