@@ -2924,14 +2924,21 @@ async function markTripCollected(tripId, date) {
     if (!cobro) return;
     const cob = (cobro.toLowerCase().startsWith('t')) ? 'transferencia' : 'efectivo';
     const status = initialPaymentStatus(cob, t.source);
+    // Fecha del cobro = hoy (automático). paid_at lleva timestamp ISO; el
+    // campo paid_on_date_local guarda YYYY-MM-DD en hora local (Habana),
+    // así evitamos que slice(0,10) del ISO devuelva un día equivocado por
+    // diferencia UTC. Va dentro de payments (JSON libre) para no requerir
+    // un campo nuevo en el schema de trips.
+    const nowIso = new Date().toISOString();
+    const todayLocal = todayStr();
     const payments = [{
       amount: t.amount, currency: t.currency || 'CUP', cobro: cob, status,
-      paid_at: new Date().toISOString()
+      paid_at: nowIso, paid_on_date_local: todayLocal
     }];
     if (t.tipAmount && t.tipAmount > 0) {
       payments.push({
         amount: t.tipAmount, currency: t.currency || 'CUP', cobro: cob,
-        status, paid_at: new Date().toISOString(), is_tip: true
+        status, paid_at: nowIso, paid_on_date_local: todayLocal, is_tip: true
       });
     }
     await fbRef.ref(`trips/${date}/${tripId}`).update({
@@ -4710,7 +4717,10 @@ function tripHTML(r, showDel) {
   const yaEntregada = pays ? pays.every(p =>
     p && (p.status === 'handed_over' || p.status === 'verified' || p.status === 'billetera')
   ) : false;
-  const choferPuedeEditar = isOwnDriver && !yaEntregada && r.payment_status !== 'pending';
+  // Chofer puede editar sus propias carreras mientras no estén entregadas
+  // físicamente al admin. Las pendientes de cobro también son editables
+  // (el chofer puede corregir monto/fecha hasta que se cobre y se entregue).
+  const choferPuedeEditar = isOwnDriver && !yaEntregada;
   const showEdit = (showDel && isAdmin) || choferPuedeEditar;
   const editBtn = showEdit ? `<div class="ti-del" style="color:var(--txt2);cursor:pointer;font-size:11px" onclick="openEditTrip('${r.id}','${r.date}')">editar</div>` : '';
   const del = (showDel && isAdmin) ? `<div class="ti-del" onclick="delTrip('${r.id}','${r.date}')">eliminar</div>` : '';
@@ -4732,6 +4742,22 @@ function tripHTML(r, showDel) {
         ${r.pasajeros && r.pasajeros > 1 ? `<span class="badge" style="font-size:9px;background:var(--bg3);color:var(--txt2);border:1px solid var(--brd)">👥 ${r.pasajeros}</span>` : ''}
       </div>
       ${r.origin ? `<div style="font-size:12px;color:var(--txt3);margin-top:3px">${r.origin} → ${r.destination || '—'}</div>` : ''}
+      ${(() => {
+        // Si la carrera fue pendiente y luego se cobró en otro día, mostramos
+        // "cobrada el [fecha]" como referencia (sin badge llamativo).
+        // Preferimos paid_on_date_local del payment (local, sin timezone bug);
+        // fallback a paid_at.slice(0,10) si la carrera es vieja.
+        const pays = (r.payments && r.payments.length) ? r.payments : null;
+        if (!pays) return '';
+        const main = pays.find(p => p && !p.is_tip) || pays[0];
+        const paidDate = (main && main.paid_on_date_local)
+          ? main.paid_on_date_local
+          : (main && main.paid_at ? main.paid_at.slice(0,10) : '');
+        if (paidDate && r.date && paidDate !== r.date) {
+          return `<div style="font-size:11px;color:var(--txt3);margin-top:3px">💰 cobrada el ${paidDate}</div>`;
+        }
+        return '';
+      })()}
       ${r.desc ? `<div style="margin-top:5px;padding:6px 8px;background:#DBEAFE;border-left:3px solid #1E40AF;border-radius:4px;font-size:11px;color:#1E40AF;font-weight:500">📝 ${r.driverName || 'Chofer'}: ${r.desc}</div>` : ''}
       ${r.admin_note ? `<div style="margin-top:5px;padding:6px 8px;background:var(--ambg);border-left:3px solid var(--am);border-radius:4px;font-size:11px;color:var(--am);font-weight:500">📌 Admin: ${r.admin_note}</div>` : ''}
       ${audioHTML}
@@ -6597,6 +6623,14 @@ async function saveEditTrip() {
   const newTime = $('et-time').value;
   const amt = parseFloat($('et-amount').value);
   if (!amt || amt <= 0) { toast('Monto inválido'); return; }
+  // Validación de fecha para chofer (admin puede mover sin restricción):
+  //   max 7 días hacia atrás, no futuro.
+  if (currentUser && currentUser.role === 'driver' && newDate !== oldDate) {
+    const today = todayStr();
+    const sieteAtras = ymdLocal(new Date(Date.now() - 7*24*60*60*1000));
+    if (newDate > today) { toast('No podés poner fecha futura'); return; }
+    if (newDate < sieteAtras) { toast('No podés mover la fecha más de 7 días hacia atrás'); return; }
+  }
   const currency = $('et-currency').value;
   const cobro = $('et-cobro').value;
   const source = $('et-source').value;
@@ -8317,11 +8351,20 @@ function renderCajaLibro(trips, pagos, pagosCanal, movs) {
     if (t.source === 'socios') return; // Socios: no afecta caja
     const monto = (t.amount || 0) + (t.tipAmount || 0);
     if (!monto) return;
+    // Si la carrera fue pendiente y se cobró en otra fecha, lo agregamos al
+    // subtítulo como referencia (display only — el período sigue usando t.date).
+    // Preferimos paid_on_date_local del payment (local, sin riesgo de timezone).
+    const pays = (t.payments && t.payments.length) ? t.payments : null;
+    const main = pays ? (pays.find(p => p && !p.is_tip) || pays[0]) : null;
+    const paidDate = (main && main.paid_on_date_local)
+      ? main.paid_on_date_local
+      : (main && main.paid_at ? main.paid_at.slice(0,10) : '');
+    const subExtra = (paidDate && paidDate !== t.date) ? ` · cobrada ${paidDate}` : '';
     ops.push({
       kind: 'in_trip',
       date: t.date, time: t.time || '12:00',
       title: `Carrera ${SRC[t.source] || t.source}`,
-      sub: `${t.driverName || '?'} · ${t.cobro || '?'}${t.tipAmount ? ' · propina ' + Math.round(t.tipAmount) : ''}`,
+      sub: `${t.driverName || '?'} · ${t.cobro || '?'}${t.tipAmount ? ' · propina ' + Math.round(t.tipAmount) : ''}${subExtra}`,
       amount: monto, currency: t.currency || 'CUP', cobro: t.cobro || 'efectivo', sign: '+',
       action: `delTrip('${t.id || t.trip_id}','${t.date}')`,
     });
