@@ -2267,9 +2267,18 @@ async function deleteLocalTrip(tripId) {
 }
 
 async function forceSyncDriver() {
-  if (!isOnline) { toast('Sin conexión'); return; }
+  if (!isOnline) {
+    // Sin conexión ahora: registrar el sync para cuando vuelva el internet
+    await requestBackgroundSync();
+    toast('Sin conexión — se subirán automáticamente al volver el internet');
+    return;
+  }
   toast('Sincronizando…');
   const res = await syncPending();
+  // También triggerea el SW para que sincronice (por si hay algo extra)
+  triggerSWSync();
+  // Y registra el background sync como red de seguridad
+  requestBackgroundSync();
   if (res.ok > 0 && res.fail === 0) toast(`✓ ${res.ok} carrera${res.ok===1?'':'s'} subida${res.ok===1?'':'s'}`);
   else if (res.ok > 0 && res.fail > 0) toast(`✓ ${res.ok} subidas · ⚠ ${res.fail} fallaron`);
   else if (res.ok === 0 && res.fail > 0) toast(`⚠ ${res.fail} carrera${res.fail===1?'':'s'} fallaron al subir`);
@@ -2277,7 +2286,11 @@ async function forceSyncDriver() {
 }
 
 async function pushTrip(trip) {
-  if (!fbRef || !isOnline) return false;
+  if (!fbRef || !isOnline) {
+    // Si no hay conexión: registrar background sync para cuando vuelva
+    requestBackgroundSync();
+    return false;
+  }
   try {
     // Marcar synced=1 antes de enviar para que el record en PB ya quede correcto
     const stripped = { ...trip, synced: 1 };
@@ -2287,8 +2300,58 @@ async function pushTrip(trip) {
   } catch(e) {
     const msg = (e && e.message) ? e.message : String(e);
     console.warn('[pushTrip] failed for', trip.id, msg, trip);
+    // Falló el push — registrar background sync para que el SW reintente
+    // cuando el browser detecte que se puede subir (incluso con app cerrada).
+    requestBackgroundSync();
     return false;
   }
+}
+
+// ── Background Sync registration ──
+// Le pide al navegador que cuando haya conexión despierte el service worker
+// para subir las carreras pendientes. Funciona incluso con la app cerrada
+// en Chrome/Edge Android. iOS Safari no lo soporta — esos siguen el flujo
+// de sync dentro de la página (auto-refresh + evento online).
+async function requestBackgroundSync() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (reg && reg.sync) {
+      await reg.sync.register('sync-trips');
+      console.log('[Sync] background sync registered');
+    }
+  } catch(e) {
+    // No soportado — usamos el sync in-page como fallback
+    console.log('[Sync] background sync not supported:', e.message);
+  }
+}
+
+// ── Trigger inmediato vía postMessage al SW ──
+// Cuando el chofer toca "Sincronizar" manualmente, además del sync de la
+// página le mandamos un mensaje al SW para que también haga su sync.
+async function triggerSWSync() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (reg && reg.active) {
+      reg.active.postMessage({ type: 'force-sync' });
+    }
+  } catch(e) {}
+}
+
+// ── Recibir mensajes del SW (cuando termina un sync en background) ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!e.data) return;
+    if (e.data.type === 'sync-done') {
+      console.log('[SW→page] sync done:', e.data.ok, 'ok,', e.data.fail, 'fail');
+      // Refrescar UI del chofer si está abierta
+      if (currentUser && currentUser.role === 'driver') {
+        try { loadDriverTrips(); } catch(e) {}
+        try { updateUnsyncedBanner(); } catch(e) {}
+      }
+    }
+  });
 }
 
 // ════════════════════════════════════════
