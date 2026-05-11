@@ -9276,10 +9276,62 @@ async function init() {
   // de la inicialización (DB, fbRef, etc.) corre después en paralelo.
   tryRestoreSession();
 
-  // Register service worker
+  // Register service worker + auto-update detection.
+  // Chequea cada 60 segundos si hay versión nueva en GitHub Pages. Cuando
+  // detecta una actualización, muestra un banner azul arriba que dice
+  // "Hay versión nueva — Actualizar". El usuario hace 1 click y la app
+  // recarga con la versión fresca. Sin esto, los choferes seguirían viendo
+  // la versión vieja hasta cerrar el browser.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      // Chequea updates cada 60 segundos
+      setInterval(() => { try { reg.update(); } catch(e){} }, 60000);
+      // Cuando el SW detecta un nuevo worker instalado, mostrar banner
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (!newSW) return;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            // Hay versión nueva lista. Mostrar banner.
+            showUpdateBanner();
+          }
+        });
+      });
+    }).catch(() => {});
+    // Cuando el SW activo cambia (después de recargar), forzamos reload
+    // para que el HTML refleje el código nuevo.
+    let _reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_reloading) return;
+      _reloading = true;
+      window.location.reload();
+    });
   }
+
+  // Banner "Hay versión nueva"
+  function showUpdateBanner() {
+    if (document.getElementById('upd-banner')) return; // ya está
+    const b = document.createElement('div');
+    b.id = 'upd-banner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1E40AF;color:#fff;padding:10px 14px;font-size:13px;font-weight:500;text-align:center;z-index:99999;box-shadow:0 2px 6px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;gap:12px;font-family:inherit';
+    b.innerHTML = `
+      <span>🎉 Hay una nueva versión disponible</span>
+      <button onclick="applyUpdate()" style="background:#fff;color:#1E40AF;border:none;border-radius:6px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Actualizar</button>
+    `;
+    document.body.appendChild(b);
+  }
+  // Aplica la actualización: le pide al SW waiting que tome control,
+  // y cuando eso ocurra el listener de controllerchange recargará la app.
+  window.applyUpdate = async function() {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.waiting) {
+        reg.waiting.postMessage({ type: 'skip-waiting' });
+      } else {
+        window.location.reload();
+      }
+    } catch(e) { window.location.reload(); }
+  };
 
   // Open IndexedDB
   try { idbDB = await openDB(); } catch(e) { console.error('DB error:', e); }

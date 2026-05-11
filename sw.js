@@ -18,7 +18,7 @@
 // IMPORTANTE: bumpear CACHE cada vez que haya un cambio mayor para forzar
 // limpieza de versiones anteriores.
 
-const CACHE = 'flotacontrol-v60';
+const CACHE = 'flotacontrol-v61';
 const PRECACHE_URLS = [
   './index.html',
   './manifest.json',
@@ -201,10 +201,17 @@ self.addEventListener('periodicsync', event => {
   event.waitUntil(_swSyncAllPending().catch(e => console.error('[SW Sync] error:', e)));
 });
 
-// ── Mensajes desde la página: trigger sync manual ──
+// ── Mensajes desde la página: trigger sync manual / skip-waiting ──
 self.addEventListener('message', event => {
   if (!event.data) return;
   if (event.data.type === 'force-sync') {
     event.waitUntil(_swSyncAllPending().catch(e => console.error('[SW Sync] error:', e)));
+  }
+  // El cliente pidió que el SW nuevo tome control YA (botón "Actualizar").
+  // skipWaiting() pasa el SW de "waiting" a "activating" inmediatamente;
+  // clients.claim() ya lo hicimos en activate, así que el controllerchange
+  // se dispara y la página recarga sola.
+  if (event.data.type === 'skip-waiting') {
+    self.skipWaiting();
   }
 });
